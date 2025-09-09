@@ -39,7 +39,7 @@ function Upload() {
     const file = acceptedFiles[0];
     const formData = new FormData();
     formData.append("file", file);
-    fetch("http://localhost:3000/crm-upload", {
+    fetch("http://localhost:3000/upload", {
       method: "POST",
       body: formData,
     })
