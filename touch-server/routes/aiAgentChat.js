@@ -7,12 +7,12 @@ router.post("/api/chat", async (req, res) => {
 
   const payload = {
     chatInput: message,
-    crmDataUrl: "https://touch-liard.vercel.app/crm-data", // n8n can fetch it
+    crmDataUrl: "https://touch-six.vercel.app/crm-data", // n8n can fetch it
   };
 
   try {
     const response = await axios.post(
-      "https://touch.app.n8n.cloud/webhook/chat-handler",
+      "https://touch.app.n8n.cloud/webhook-test/chat-handler",
       { payload }
     );
     console.log("n8n response:", response.data.output);

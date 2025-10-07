@@ -25,7 +25,7 @@ function PostForm({ onSave }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const res = await fetch("https://touch-liard.vercel.app/api/posts", {
+    const res = await fetch("https://touch-six.vercel.app/api/posts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form)

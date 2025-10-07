@@ -11,7 +11,7 @@ function AiChat() {
         if (!message.trim()) return;
         setLoading(true);
         try {
-            const response = await axios.post('https://touch-liard.vercel.app/api/chat', { message });
+            const response = await axios.post('https://touch-six.vercel.app/api/chat', { message });
             setChatLog((prev) => [...prev, { user: message, bot: response.data.reply }]);
             setMessage('');
         } catch (err) {

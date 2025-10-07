@@ -39,7 +39,7 @@ function Upload() {
     const file = acceptedFiles[0];
     const formData = new FormData();
     formData.append("file", file);
-    fetch("https://touch-liard.vercel.app/crm-upload", {
+    fetch("https://touch-six.vercel.app/crm-upload", {
       method: "POST",
       body: formData,
     })
