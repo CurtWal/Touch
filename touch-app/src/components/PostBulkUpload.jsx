@@ -14,7 +14,7 @@ export default function PostBulkUpload() {
     formData.append("file", file); // must match upload.single('file')
 
     try {
-      const res = await fetch("http://localhost:3000/api/posts/upload", {
+      const res = await fetch("https://touch-liard.vercel.app/api/posts/upload", {
         method: "POST",
         body: formData, // no headers!
       });

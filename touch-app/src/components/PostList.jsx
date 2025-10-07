@@ -6,13 +6,13 @@ function PostList() {
   const [posts, setPosts] = useState([]);
 
   const fetchPosts = async () => {
-    const res = await fetch("http://localhost:3000/api/posts");
+    const res = await fetch("https://touch-liard.vercel.app/api/posts");
     const data = await res.json();
     setPosts(data);
   };
 
   const approvePost = async (id) => {
-    await axios.put(`http://localhost:3000/api/posts/${id}/approve`);
+    await axios.put(`https://touch-liard.vercel.app/api/posts/${id}/approve`);
     // await fetch(`http://localhost:3000/api/posts/${id}/approve`, {
     //   method: "PUT",
     // });

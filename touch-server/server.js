@@ -6,6 +6,7 @@ const cors = require("cors");
 const xlsx = require("xlsx");
 const mongoose = require("mongoose");
 const postRoutes = require("./routes/post");
+const aiAgentChatRoutes = require("./routes/aiAgentChat");
 
 // import agenda (if using agenda for scheduling)
 const { agenda } = require("./jobs/agendaScheduler");
@@ -13,9 +14,13 @@ require("dotenv").config();
 app.use(cors());
 app.use(express.json());
 app.use(fileUpload());
+
 app.get("/", (req, res) => {
   res.send("Hello World");
 });
+
+let uploadedCRMData = [];
+
 app.post("/crm-upload", (req, res) => {
   try {
     if (!req.files || !req.files.file) {
@@ -57,19 +62,42 @@ app.post("/crm-upload", (req, res) => {
 
     // Check if all required columns exist in the file
     const allColumns = Object.keys(data[0] || {});
-    const hasAllColumns =
-      REQUIRED_FIELDS.every((field) => allColumns.includes(field)) &&
-      OPTIONAL_FIELDS.every((field) => allColumns.includes(field));
-    if (!hasAllColumns) {
-      return res
-        .status(400)
-        .json({ error: "Invalid file: missing required columns." });
+    // const hasAllColumns =
+    //   REQUIRED_FIELDS.every((field) => allColumns.includes(field)) &&
+    //   OPTIONAL_FIELDS.every((field) => allColumns.includes(field));
+    // if (!hasAllColumns) {
+    //   return res
+    //     .status(400)
+    //     .json({ error: "Invalid file: missing required columns." });
+    // }
+    const missingRequired = REQUIRED_FIELDS.filter(
+      (field) => !allColumns.includes(field)
+    );
+
+    if (missingRequired.length > 0) {
+      return res.status(400).json({
+        error: `Invalid file: missing required columns: ${missingRequired.join(
+          ", "
+        )}`,
+      });
     }
+
+    // ✅ Fill in any missing optional fields
+    data = data.map((row) => {
+      OPTIONAL_FIELDS.forEach((f) => {
+        if (!(f in row)) row[f] = "";
+      });
+      return row;
+    });
 
     // Validate each row for required fields (must not be empty)
     let errors = [];
     data = data.map((row, idx) => {
-      let newRow = { ...row };
+      // Convert all fields to strings (so .trim() is always safe)
+      const newRow = {};
+      for (const key in row) {
+        newRow[key] = row[key] == null ? "" : String(row[key]);
+      }
 
       // Email validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -81,13 +109,14 @@ app.post("/crm-upload", (req, res) => {
 
       // Phone validation
       const phoneRegex = /^\+?[0-9\s\-().]{7,}$/;
-      if (!newRow.phone || !phoneRegex.test(newRow.phone.trim())) {
+      const phoneValue = newRow.phone.trim();
+      if (!phoneValue || !phoneRegex.test(phoneValue)) {
         errors.push(
           `Row ${idx + 2}: Invalid or missing phone "${newRow.phone}"`
         );
       }
 
-      // Normalize social URLs (if present)
+      // Normalize social URLs
       const normalizeUrl = (url, prefix) => {
         if (!url) return "";
         let u = url.trim();
@@ -113,9 +142,9 @@ app.post("/crm-upload", (req, res) => {
         "https://instagram.com/"
       );
 
-      // Check other required fields (must not be empty)
+      // Required fields not empty
       REQUIRED_FIELDS.forEach((field) => {
-        if (!newRow[field] || String(newRow[field]).trim() === "") {
+        if (!newRow[field] || newRow[field].trim() === "") {
           errors.push(`Row ${idx + 2}: Missing value for "${field}"`);
         }
       });
@@ -140,23 +169,27 @@ app.post("/crm-upload", (req, res) => {
       seen.add(key);
       return true;
     });
-
-    res.json(data);
+    uploadedCRMData = data;
+    console.log(`Uploaded ${data.length} valid rows`);
+    res.json({ success: true, count: data.length, rows: data });
   } catch (error) {
     console.error("Error uploading file:", error);
     res.status(500).send("Error uploading file");
   }
 });
 
-app.use("/api/posts", postRoutes);
+app.get("/crm-data", (req, res) => {
+  if (!uploadedCRMData.length)
+    return res.status(404).json({ error: "No data uploaded yet" });
+  res.json(uploadedCRMData);
+});
 
+app.use("/api/posts", postRoutes);
+app.use("/", aiAgentChatRoutes);
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("Connected to Mongoose"))
   .catch((err) => console.log("Error connecting to MongoDB:", err));
-app.get("/", (req, res) => {
-  res.send("Hello World!");
-});
 
 (async function () {
   await agenda.start();

@@ -39,12 +39,12 @@ function Upload() {
     const file = acceptedFiles[0];
     const formData = new FormData();
     formData.append("file", file);
-    fetch("http://localhost:3000/crm-upload", {
+    fetch("https://touch-liard.vercel.app/crm-upload", {
       method: "POST",
       body: formData,
     })
       .then((response) => response.json())
-      .then((data) => setData(Array.isArray(data) ? data : []))
+      .then((data) => {if(data.error) throw new Error(data.error); setData(data.rows || data);})
       .catch((error) => setError(error.message))
       .finally(() => setLoading(false));
   }, []);
