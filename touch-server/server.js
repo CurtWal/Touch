@@ -7,6 +7,16 @@ const xlsx = require("xlsx");
 const mongoose = require("mongoose");
 const postRoutes = require("./routes/post");
 const aiAgentChatRoutes = require("./routes/aiAgentChat");
+const formData = require("form-data");
+const Mailgun = require("mailgun.js");
+const twilio = require("twilio");
+
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
+const mailgun = new Mailgun(formData);
+const mg = mailgun.client({ username: "api", key: process.env.MAILGUN_KEY });
 
 // import agenda (if using agenda for scheduling)
 const { agenda } = require("./jobs/agendaScheduler");
@@ -182,6 +192,59 @@ app.get("/crm-data", (req, res) => {
   if (!uploadedCRMData.length)
     return res.status(404).json({ error: "No data uploaded yet" });
   res.json(uploadedCRMData);
+});
+
+// ---------------- SEND MESSAGE ROUTE ----------------
+app.post("/send-message", async (req, res) => {
+  try {
+    const { type, name, message } = req.body; // type: "email" or "sms"
+
+    if (!type || !name || !message) {
+      return res.status(400).json({
+        error: "Missing required fields: type, name, or message",
+      });
+    }
+
+    // 🔍 Find contact in uploaded CRM data
+    const contact = uploadedCRMData.find(
+      (c) =>
+        c.first_name?.toLowerCase() === name.toLowerCase() ||
+        `${c.first_name} ${c.last_name}`.toLowerCase() ===
+          name.toLowerCase()
+    );
+
+    if (!contact) {
+      return res.status(404).json({ error: `No contact found for ${name}` });
+    }
+
+    if (type === "email") {
+      // ✅ Send Email
+      await mg.messages.create("motgpayment.com", {
+        from: process.env.EMAIL_USER,
+        to: [contact.email],  
+        subject: "Message from Touch App",
+        text: message,
+      });
+
+      console.log(`✅ Email sent to ${contact.email}`);
+      return res.json({ success: true, message: `Email sent to ${contact.email}` });
+
+    } else if (type === "sms") {
+      // ✅ Send SMS
+      await twilioClient.messages.create({
+        body: message,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: contact.phone,
+      });
+      console.log(`✅ SMS sent to ${contact.phone}`);
+      return res.json({ success: true, message: `SMS sent to ${contact.phone}` });
+    }
+
+    res.status(400).json({ error: "Invalid message type" });
+  } catch (error) {
+    console.error("❌ Error sending message:", error);
+    res.status(500).json({ error: "Failed to send message", details: error.message });
+  }
 });
 
 app.use("/api/posts", postRoutes);
