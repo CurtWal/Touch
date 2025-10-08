@@ -119,10 +119,10 @@ app.post("/crm-upload", (req, res) => {
 
       // Phone validation
       const phoneRegex = /^\+?[0-9\s\-().]{7,}$/;
-      const phoneValue = newRow.phone.trim();
+      const phoneValue = newRow.phone ? newRow.phone.trim() : "";
       if (!phoneValue || !phoneRegex.test(phoneValue)) {
         errors.push(
-          `Row ${idx + 2}: Invalid or missing phone "${newRow.phone}"`
+          `Row ${idx + 2}: Invalid or missing phone "${newRow.phone || ""}"`
         );
       }
 
@@ -209,8 +209,7 @@ app.post("/send-message", async (req, res) => {
     const contact = uploadedCRMData.find(
       (c) =>
         c.first_name?.toLowerCase() === name.toLowerCase() ||
-        `${c.first_name} ${c.last_name}`.toLowerCase() ===
-          name.toLowerCase()
+        `${c.first_name} ${c.last_name}`.toLowerCase() === name.toLowerCase()
     );
 
     if (!contact) {
@@ -221,29 +220,36 @@ app.post("/send-message", async (req, res) => {
       // ✅ Send Email
       await mg.messages.create("motgpayment.com", {
         from: process.env.EMAIL_USER,
-        to: [contact.email],  
+        to: [contact.email],
         subject: "Message from Touch App",
         text: message,
       });
 
       console.log(`✅ Email sent to ${contact.email}`);
-      return res.json({ success: true, message: `Email sent to ${contact.email}` });
-
+      return res.json({
+        success: true,
+        message: `Email sent to ${contact.email}`,
+      });
     } else if (type === "sms") {
       // ✅ Send SMS
       await twilioClient.messages.create({
         body: message,
-        from: process.env.TWILIO_PHONE_NUMBER,
+        from: process.env.TWILIO_NUMBER,
         to: contact.phone,
       });
       console.log(`✅ SMS sent to ${contact.phone}`);
-      return res.json({ success: true, message: `SMS sent to ${contact.phone}` });
+      return res.json({
+        success: true,
+        message: `SMS sent to ${contact.phone}`,
+      });
     }
 
     res.status(400).json({ error: "Invalid message type" });
   } catch (error) {
     console.error("❌ Error sending message:", error);
-    res.status(500).json({ error: "Failed to send message", details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to send message", details: error.message });
   }
 });
 
