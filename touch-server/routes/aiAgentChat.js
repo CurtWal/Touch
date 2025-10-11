@@ -17,19 +17,30 @@ router.post("/api/chat", async (req, res) => {
     );
 
     const reply = response.data.output;
+    let clean = reply;
 
+    // Remove markdown fences and trim whitespace
+    clean = clean
+      .replace(/```json/i, "")
+      .replace(/```/g, "")
+      .trim();
     // Try to parse JSON output from AI
     let parsed;
     try {
-      parsed = JSON.parse(reply);
-    } catch (e) {}
+      parsed = JSON.parse(clean);
+    } catch (e) {
+      console.error("❌ Failed to parse AI reply:", clean);
+    }
 
     if (parsed?.action === "send_message") {
-      const sendRes = await axios.post("https://touch-six.vercel.app/send-message", {
-        type: parsed.type,
-        name: parsed.name,
-        message: parsed.message,
-      });
+      const sendRes = await axios.post(
+        "https://touch-six.vercel.app/send-message",
+        {
+          type: parsed.type,
+          name: parsed.name,
+          message: parsed.message,
+        }
+      );
 
       return res.json({
         reply: `✅ ${parsed.type.toUpperCase()} sent to ${parsed.name}!`,
@@ -44,7 +55,5 @@ router.post("/api/chat", async (req, res) => {
     res.status(500).json({ error: "Chat failed" });
   }
 });
-
-
 
 module.exports = router;
