@@ -7,8 +7,8 @@ const { verifyToken } = require("./auth");
 router.post("/api/chat", verifyToken, async (req, res) => {
   const { message } = req.body;
   const userId = req.user.id;
-      // ✅ fetch this user's CRM contacts from MongoDB
-    const userCrmData = await Contact.find({ userId }).lean();
+  // ✅ fetch this user's CRM contacts from MongoDB
+  const userCrmData = await Contact.find({ userId }).lean();
 
   const payload = {
     chatInput: message,
@@ -38,12 +38,19 @@ router.post("/api/chat", verifyToken, async (req, res) => {
     }
 
     if (parsed?.action === "send_message") {
+      const token = req.headers.authorization?.split(" ")[1];
+
       const sendRes = await axios.post(
         "https://touch-six.vercel.app/send-message",
         {
           type: parsed.type,
           name: parsed.name,
           message: parsed.message,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         }
       );
 
