@@ -1,13 +1,18 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
+const Contact = require("../models/Contact");
+const { verifyToken } = require("./auth");
 
 router.post("/api/chat", async (req, res) => {
   const { message } = req.body;
+  const userId = req.user.id;
+      // ✅ fetch this user's CRM contacts from MongoDB
+    const userCrmData = await Contact.find({ userId }).lean();
 
   const payload = {
     chatInput: message,
-    crmDataUrl: "https://touch-six.vercel.app/crm-data",
+    crmDataUrl: userCrmData, // pass CRM data directly
   };
 
   try {

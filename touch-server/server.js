@@ -10,6 +10,9 @@ const aiAgentChatRoutes = require("./routes/aiAgentChat");
 const formData = require("form-data");
 const Mailgun = require("mailgun.js");
 const twilio = require("twilio");
+const Contact = require("./models/Contacts");
+const { verifyToken } = require("./routes/auth");
+const Auth = require("./routes/auth");
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -31,18 +34,23 @@ app.get("/", (req, res) => {
 
 let uploadedCRMData = [];
 
-app.post("/crm-upload", (req, res) => {
+app.post("/crm-upload", verifyToken, async (req, res) => {
   try {
+    const userId = req.user.id; // ⚠️ include userId in your request
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+
     if (!req.files || !req.files.file) {
       return res.status(400).send("No file uploaded");
     }
+
     const file = req.files.file;
     const workBook = xlsx.read(file.data, { type: "buffer" });
     const sheetName = workBook.SheetNames[0];
     const sheet = workBook.Sheets[sheetName];
     let data = xlsx.utils.sheet_to_json(sheet);
 
-    // Required fields for a valid row (core identity/contact fields)
     const REQUIRED_FIELDS = [
       "first_name",
       "last_name",
@@ -55,7 +63,6 @@ app.post("/crm-upload", (req, res) => {
       "timezone",
     ];
 
-    // Social/media fields (optional, but must exist as columns)
     const OPTIONAL_FIELDS = [
       "linkedin_url",
       "instagram_handle",
@@ -70,16 +77,7 @@ app.post("/crm-upload", (req, res) => {
       "notes",
     ];
 
-    // Check if all required columns exist in the file
     const allColumns = Object.keys(data[0] || {});
-    // const hasAllColumns =
-    //   REQUIRED_FIELDS.every((field) => allColumns.includes(field)) &&
-    //   OPTIONAL_FIELDS.every((field) => allColumns.includes(field));
-    // if (!hasAllColumns) {
-    //   return res
-    //     .status(400)
-    //     .json({ error: "Invalid file: missing required columns." });
-    // }
     const missingRequired = REQUIRED_FIELDS.filter(
       (field) => !allColumns.includes(field)
     );
@@ -92,7 +90,6 @@ app.post("/crm-upload", (req, res) => {
       });
     }
 
-    // ✅ Fill in any missing optional fields
     data = data.map((row) => {
       OPTIONAL_FIELDS.forEach((f) => {
         if (!(f in row)) row[f] = "";
@@ -100,16 +97,13 @@ app.post("/crm-upload", (req, res) => {
       return row;
     });
 
-    // Validate each row for required fields (must not be empty)
     let errors = [];
     data = data.map((row, idx) => {
-      // Convert all fields to strings (so .trim() is always safe)
       const newRow = {};
       for (const key in row) {
         newRow[key] = row[key] == null ? "" : String(row[key]);
       }
 
-      // Email validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!newRow.email || !emailRegex.test(newRow.email.trim())) {
         errors.push(
@@ -117,7 +111,6 @@ app.post("/crm-upload", (req, res) => {
         );
       }
 
-      // Phone validation
       const phoneRegex = /^\+?[0-9\s\-().]{7,}$/;
       const phoneValue = newRow.phone ? newRow.phone.trim() : "";
       if (!phoneValue || !phoneRegex.test(phoneValue)) {
@@ -126,7 +119,6 @@ app.post("/crm-upload", (req, res) => {
         );
       }
 
-      // Normalize social URLs
       const normalizeUrl = (url, prefix) => {
         if (!url) return "";
         let u = url.trim();
@@ -152,7 +144,6 @@ app.post("/crm-upload", (req, res) => {
         "https://instagram.com/"
       );
 
-      // Required fields not empty
       REQUIRED_FIELDS.forEach((field) => {
         if (!newRow[field] || newRow[field].trim() === "") {
           errors.push(`Row ${idx + 2}: Missing value for "${field}"`);
@@ -166,7 +157,6 @@ app.post("/crm-upload", (req, res) => {
       return res.status(400).json({ error: errors.join("; ") });
     }
 
-    // Remove duplicates (by all fields)
     const ALL_FIELDS = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
     const seen = new Set();
     data = data.filter((row) => {
@@ -179,19 +169,32 @@ app.post("/crm-upload", (req, res) => {
       seen.add(key);
       return true;
     });
-    uploadedCRMData = data;
-    console.log(`Uploaded ${data.length} valid rows`);
-    res.json({ success: true, count: data.length, rows: data });
+
+    // ✅ Add userId to each row before saving
+    const contactsToInsert = data.map((row) => ({
+      userId,
+      ...row,
+    }));
+
+    // ✅ Save all to MongoDB
+    await Contact.insertMany(contactsToInsert);
+
+    console.log(`✅ Uploaded ${data.length} valid contacts for user ${userId}`);
+    res.json({ success: true, count: data.length });
   } catch (error) {
-    console.error("Error uploading file:", error);
+    console.error("❌ Error uploading file:", error);
     res.status(500).send("Error uploading file");
   }
 });
 
-app.get("/crm-data", (req, res) => {
-  if (!uploadedCRMData.length)
-    return res.status(404).json({ error: "No data uploaded yet" });
-  res.json(uploadedCRMData);
+app.get("/crm/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const contacts = await Contact.find({ userId });
+    res.json(contacts);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching CRM data" });
+  }
 });
 
 // ---------------- SEND MESSAGE ROUTE ----------------
@@ -206,11 +209,21 @@ app.post("/send-message", async (req, res) => {
     }
 
     // 🔍 Find contact in uploaded CRM data
-    const contact = uploadedCRMData.find(
-      (c) =>
-        c.first_name?.toLowerCase() === name.toLowerCase() ||
-        `${c.first_name} ${c.last_name}`.toLowerCase() === name.toLowerCase()
-    );
+    const contact = await Contact.findOne({
+      userId: req.user.id,
+      $or: [
+        { first_name: new RegExp(`^${name}$`, "i") },
+        {
+          $expr: {
+            $regexMatch: {
+              input: { $concat: ["$first_name", " ", "$last_name"] },
+              regex: `^${name}$`,
+              options: "i",
+            },
+          },
+        },
+      ],
+    });
 
     if (!contact) {
       return res.status(404).json({ error: `No contact found for ${name}` });
@@ -255,6 +268,7 @@ app.post("/send-message", async (req, res) => {
 
 app.use("/api/posts", postRoutes);
 app.use("/", aiAgentChatRoutes);
+app.use("/", Auth.router);
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("Connected to Mongoose"))
