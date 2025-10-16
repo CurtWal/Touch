@@ -198,7 +198,7 @@ app.get("/crm/:userId", async (req, res) => {
 });
 
 // ---------------- SEND MESSAGE ROUTE ----------------
-app.post("/send-message", async (req, res) => {
+app.post("/send-message", verifyToken, async (req, res) => {
   try {
     const { type, name, message } = req.body; // type: "email" or "sms"
 
