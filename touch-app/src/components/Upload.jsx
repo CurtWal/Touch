@@ -39,7 +39,7 @@ function Upload() {
     const userId = localStorage.getItem("userId");
     if (!userId) return;
     setLoading(true);
-    fetch(`http://localhost:3000/crm/${userId}`, {
+    fetch(`https://touch-six.vercel.app/crm/${userId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -59,7 +59,7 @@ function Upload() {
     const userId = localStorage.getItem("userId");
     const formData = new FormData();
     formData.append("file", file);
-    fetch("http://localhost:3000/crm-upload", {
+    fetch("https://touch-six.vercel.app//crm-upload", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
@@ -68,7 +68,7 @@ function Upload() {
       .then((data) => {
         if (data.error) throw new Error(data.error);
         // After upload, fetch latest CRM data and overwrite formRows
-        return fetch(`http://localhost:3000/crm/${userId}`, {
+        return fetch(`https://touch-six.vercel.app//crm/${userId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
       })
@@ -113,7 +113,7 @@ function Upload() {
     if (newRows.length === 0) return;
 
     try {
-      const res = await fetch("http://localhost:3000/crm-add", {
+      const res = await fetch("https://touch-six.vercel.app/crm-add", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

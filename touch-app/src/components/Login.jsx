@@ -14,7 +14,7 @@ function Login() {
         e.preventDefault(); 
         const { email, password } = e.target.elements;
         try {
-            const response = await axios.post('http://localhost:3000/login', {
+            const response = await axios.post('https://touch-six.vercel.app/login', {
                 email: email.value,
                 password: password.value,
             });

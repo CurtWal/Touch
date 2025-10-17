@@ -25,10 +25,10 @@ router.post("/api/chat", verifyToken, async (req, res) => {
 
     let clean = response.data.output || "";
 
-    // Remove markdown fences and trim whitespace
+    // 🔹 Remove markdown fences and trim whitespace
     clean = clean.replace(/```json/i, "").replace(/```/g, "").trim();
 
-    // Try to parse the AI response
+    // 🔹 Try to parse AI JSON
     let parsed;
     try {
       parsed = JSON.parse(clean);
@@ -40,42 +40,76 @@ router.post("/api/chat", verifyToken, async (req, res) => {
     if (parsed?.action === "send_message") {
       const token = req.headers.authorization?.split(" ")[1];
 
-      // build the body based on the AI's response
-      const sendBody = {
-        type: parsed.type,
-        message: parsed.message,
-      };
+      // 🧩 Support multiple types like ["email", "sms"]
+      const sendTypes = Array.isArray(parsed.types)
+        ? parsed.types
+        : [parsed.type]; // fallback if single type
+
+      // 🧩 Build recipient list
+      let recipients = {};
 
       if (parsed.sendToAll) {
-        sendBody.sendToAll = true;
-      } else if (Array.isArray(parsed.names)) {
-        sendBody.names = parsed.names;
+        recipients = { sendToAll: true };
+      } else if (Array.isArray(parsed.names) && parsed.names.length > 0) {
+        const validNames = parsed.names.filter((n) =>
+          userCrmData.some(
+            (c) =>
+              `${c.first_name} ${c.last_name}`.toLowerCase() === n.toLowerCase()
+          )
+        );
+        if (validNames.length === 0) {
+          return res.status(400).json({ error: "No valid contact names found." });
+        }
+        recipients = { names: validNames };
       } else if (parsed.name) {
-        sendBody.name = parsed.name;
+        const found = userCrmData.find(
+          (c) =>
+            `${c.first_name} ${c.last_name}`.toLowerCase() ===
+            parsed.name.toLowerCase()
+        );
+        if (!found) {
+          return res.status(400).json({ error: "Contact not found." });
+        }
+        recipients = { name: found.first_name + " " + found.last_name };
       } else {
         return res
           .status(400)
-          .json({ error: "Invalid AI response: no recipient info." });
+          .json({ error: "Invalid AI response: missing recipient info." });
       }
 
-      // 🔹 Send message request to your own backend route
-      const sendRes = await axios.post(
-        "https://touch-six.vercel.app/send-message",
-        sendBody,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      // 🔹 Send for each message type
+      const sendPromises = sendTypes.map(async (type) => {
+        const sendBody = {
+          type,
+          message: parsed.message,
+          ...recipients,
+        };
+
+        return axios.post(
+          "https://touch-six.vercel.app/send-message",
+          sendBody,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+      });
+
+      // Run all (email + sms) in parallel
+      const results = await Promise.allSettled(sendPromises);
+
+      const summary = results.map((r, i) => ({
+        type: sendTypes[i],
+        status: r.status,
+        details: r.value?.data || r.reason?.message,
+      }));
 
       return res.json({
-        reply: `✅ ${parsed.type.toUpperCase()} action processed.`,
-        details: sendRes.data,
+        reply: `✅ Sent ${sendTypes.join(" & ")} successfully.`,
+        summary,
       });
     }
 
-    // 🗣️ Otherwise, normal chat (non-message AI responses)
+    // 🗣️ Normal AI chat response (non-send action)
     res.json({ reply: clean });
   } catch (err) {
     console.error("❌ n8n error:", err.response?.data || err.message);
