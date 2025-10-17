@@ -196,21 +196,79 @@ app.get("/crm/:userId", async (req, res) => {
     res.status(500).json({ message: "Error fetching CRM data" });
   }
 });
+app.post("/crm-add", verifyToken, async (req, res) => {
+  try {
+    const { userId, contacts } = req.body;
+    if (!userId || !contacts || !Array.isArray(contacts)) {
+      return res.status(400).json({ error: "Missing userId or contacts" });
+    }
+    // Remove _unsaved flag before saving
+    const contactsToInsert = contacts.map(({ _unsaved, ...row }) => ({
+      userId,
+      ...row,
+    }));
+    await Contact.insertMany(contactsToInsert);
+    res.json({ success: true, count: contactsToInsert.length });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to add contacts" });
+  }
+});
+
 
 // ---------------- SEND MESSAGE ROUTE ----------------
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 app.post("/send-message", verifyToken, async (req, res) => {
   try {
-    const { type, name, message } = req.body; // type: "email" or "sms"
+    const { type, name, names, message, sendToAll } = req.body;
+    const userId = req.user.id;
 
-    if (!type || !name || !message) {
+    if (!type || !message) {
       return res.status(400).json({
-        error: "Missing required fields: type, name, or message",
+        error: "Missing required fields: type or message",
       });
     }
 
-    // 🔍 Find contact in uploaded CRM data
+    // 🔹 If user wants to send to all contacts
+    if (sendToAll) {
+      const contacts = await Contact.find({ userId });
+      return await sendBatchMessages(contacts, type, message, res);
+    }
+
+    // 🔹 If user provides a list of names
+    if (Array.isArray(names) && names.length > 0) {
+      const contacts = await Contact.find({
+        userId,
+        $or: names.map((n) => ({
+          $or: [
+            { first_name: new RegExp(`^${n}$`, "i") },
+            {
+              $expr: {
+                $regexMatch: {
+                  input: { $concat: ["$first_name", " ", "$last_name"] },
+                  regex: `^${n}$`,
+                  options: "i",
+                },
+              },
+            },
+          ],
+        })),
+      });
+
+      if (!contacts.length)
+        return res.status(404).json({ error: "No matching contacts found." });
+
+      return await sendBatchMessages(contacts, type, message, res);
+    }
+
+    // 🔹 Single name fallback
+    if (!name)
+      return res.status(400).json({ error: "Missing contact name or names list." });
+
     const contact = await Contact.findOne({
-      userId: req.user.id,
+      userId,
       $or: [
         { first_name: new RegExp(`^${name}$`, "i") },
         {
@@ -225,46 +283,75 @@ app.post("/send-message", verifyToken, async (req, res) => {
       ],
     });
 
-    if (!contact) {
+    if (!contact)
       return res.status(404).json({ error: `No contact found for ${name}` });
-    }
 
-    if (type === "email") {
-      // ✅ Send Email
-      await mg.messages.create("motgpayment.com", {
-        from: process.env.EMAIL_USER,
-        to: [contact.email],
-        subject: "Message from Touch App",
-        text: message,
-      });
-
-      console.log(`✅ Email sent to ${contact.email}`);
-      return res.json({
-        success: true,
-        message: `Email sent to ${contact.email}`,
-      });
-    } else if (type === "sms") {
-      // ✅ Send SMS
-      await twilioClient.messages.create({
-        body: message,
-        from: process.env.TWILIO_NUMBER,
-        to: contact.phone,
-      });
-      console.log(`✅ SMS sent to ${contact.phone}`);
-      return res.json({
-        success: true,
-        message: `SMS sent to ${contact.phone}`,
-      });
-    }
-
-    res.status(400).json({ error: "Invalid message type" });
+    await sendSingleMessage(contact, type, message);
+    return res.json({ success: true, message: `✅ ${type.toUpperCase()} sent to ${contact.email || contact.phone}` });
   } catch (error) {
     console.error("❌ Error sending message:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to send message", details: error.message });
+    res.status(500).json({ error: "Failed to send message", details: error.message });
   }
 });
+
+async function sendSingleMessage(contact, type, message) {
+  if (type === "email" && contact.email) {
+    await mg.messages.create("motgpayment.com", {
+      from: process.env.EMAIL_USER,
+      to: [contact.email],
+      subject: "Message from Touch App",
+      text: message,
+    });
+    console.log(`✅ Email sent to ${contact.email}`);
+  } else if (type === "sms" && contact.phone) {
+    await twilioClient.messages.create({
+      body: message,
+      from: process.env.TWILIO_NUMBER,
+      to: contact.phone,
+    });
+    console.log(`✅ SMS sent to ${contact.phone}`);
+  } else {
+    throw new Error("Missing contact email or phone.");
+  }
+}
+
+async function sendBatchMessages(contacts, type, message, res) {
+  const batchSize = 10;
+  let sent = 0;
+  const errors = [];
+
+  for (let i = 0; i < contacts.length; i += batchSize) {
+    const batch = contacts.slice(i, i + batchSize);
+
+    await Promise.all(
+      batch.map(async (contact) => {
+        try {
+          await sendSingleMessage(contact, type, message);
+          sent++;
+        } catch (err) {
+          errors.push({
+            contact: contact.email || contact.phone,
+            error: err.message,
+          });
+        }
+      })
+    );
+
+    // wait before next batch to avoid rate limits
+    if (i + batchSize < contacts.length) {
+      await sleep(5000);
+    }
+  }
+
+  return res.json({
+    success: true,
+    sent,
+    errors,
+    message: `✅ ${type.toUpperCase()} sent to ${sent} contacts.`,
+  });
+}
+
+
 
 app.use("/api/posts", postRoutes);
 app.use("/", aiAgentChatRoutes);

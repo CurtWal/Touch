@@ -1,7 +1,15 @@
 import React, { Component } from 'react';
 import axios from 'axios';
-
+import {
+  useNavigate,
+  BrowserRouter as Router,
+  Route,
+  Link,
+  Routes,
+} from "react-router-dom";
 function Login() {
+      const navigate = useNavigate();
+
     const handleLogin = async (e) => {
         e.preventDefault(); 
         const { email, password } = e.target.elements;
@@ -14,6 +22,7 @@ function Login() {
             localStorage.setItem('userId', response.data.user.id);
             console.log(localStorage.getItem('userId'));
             alert('Login successful!');
+            navigate("/");
             window.location.reload();
         } catch (error) {
             alert('Login failed: ' + error.response.data.error);
