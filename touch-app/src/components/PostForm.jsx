@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import axios from "axios";
 
 function PostForm({ onSave }) {
   const [form, setForm] = useState({
@@ -6,7 +7,8 @@ function PostForm({ onSave }) {
     body_text: "",
     media: [],
     first_comment: "",
-    scheduled_at: ""
+    scheduled_at: "",
+    mediaFiles: [],
   });
 
   const handleChange = (e) => {
@@ -25,13 +27,47 @@ function PostForm({ onSave }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const res = await fetch("https://touch-six.vercel.app/api/posts", {
+
+    const token = localStorage.getItem("token");
+    const uploadedIds = [];
+
+    if (form.mediaFiles?.length) {
+      for (const f of form.mediaFiles) {
+        const fd = new FormData();
+        fd.append("file", f);
+
+        const res = await axios.post(
+          "http://localhost:3000/api/posts/upload-media",
+          fd,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        uploadedIds.push(res.data.mediaId);
+      }
+    }
+
+    const payload = {
+      ...form,
+      media: [...(form.media || []), ...uploadedIds], // array of ObjectIds
+    };
+
+    await fetch("http://localhost:3000/api/posts", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form)
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    onSave(data);
+  };
+
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 4); // limit count client-side
+    setForm((p) => ({ ...p, mediaFiles: files }));
   };
 
   return (
@@ -61,6 +97,19 @@ function PostForm({ onSave }) {
             {platform}
           </label>
         ))}
+      </div>
+      <div className="mt-2">
+        <label className="block mb-1">
+          Attach images (jpg/png/webp, max{" "}
+          {parseInt(import.meta.env.REACT_APP_LINKEDIN_IMAGE_MAX_MB || "5")}MB)
+        </label>
+        <input
+          type="file"
+          name="file"
+          accept="image/*"
+          multiple
+          onChange={handleFileChange}
+        />
       </div>
       <button type="submit" className="bg-blue-500 text-white px-4 py-2 mt-2">
         Save Post

@@ -6,16 +6,19 @@ function PostList() {
   const [posts, setPosts] = useState([]);
 
   const fetchPosts = async () => {
-    const res = await fetch("https://touch-six.vercel.app/api/posts");
+    const token = localStorage.getItem("token");
+    const res = await fetch("http://localhost:3000/api/posts", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     const data = await res.json();
     setPosts(data);
   };
 
   const approvePost = async (id) => {
-    await axios.put(`https://touch-six.vercel.app/api/posts/${id}/approve`);
-    // await fetch(`http://localhost:3000/api/posts/${id}/approve`, {
-    //   method: "PUT",
-    // });
+    const token = localStorage.getItem("token");
+    await axios.put(`http://localhost:3000/api/posts/${id}/approve`, {}, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
     fetchPosts();
   };
 

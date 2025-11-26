@@ -19,7 +19,7 @@ router.post("/api/chat", verifyToken, async (req, res) => {
 
     // 🔹 Call your n8n AI webhook
     const response = await axios.post(
-      "https://touch.app.n8n.cloud/webhook/chat-handler",
+      "http://localhost:5678/webhook/chat-handler",
       { payload }
     );
 
@@ -86,7 +86,7 @@ router.post("/api/chat", verifyToken, async (req, res) => {
         };
 
         return axios.post(
-          "https://touch-six.vercel.app/send-message",
+          "http://localhost:3000/send-message",
           sendBody,
           {
             headers: { Authorization: `Bearer ${token}` },

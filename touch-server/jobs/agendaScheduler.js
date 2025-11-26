@@ -2,28 +2,112 @@ const Agenda = require("agenda");
 const Post = require("../models/Post");
 require("dotenv").config();
 
-const agenda = new Agenda({ db: { 
-    address: process.env.MONGO_URI, 
-    collection: "jobs" 
-  } });
+const agenda = new Agenda({
+  db: {
+    address: process.env.MONGO_URI,
+    collection: "jobs",
+  },
+  processEvery: "5 seconds",
+  maxConcurrency: 20,
+  defaultLockLifetime: 1000 * 60 * 10, // 10 minutes
+});
 
 // Define job
 agenda.define("publish post", async (job) => {
-  const { postId } = job.attrs.data;
-  const post = await Post.findById(postId);
+  try {
+    const { postId } = job.attrs.data;
+    const post = await Post.findById(postId);
+    if (!post) {
+      console.warn(`publish post: post not found ${postId}`);
+      return;
+    }
 
-  if (!post || post.status !== "scheduled") return;
+    if (post.status !== "scheduled") {
+      console.log(
+        `publish post: skipping post ${postId}, status=${post.status}`
+      );
+      return;
+    }
 
-  console.log(`Publishing post: ${post.body_text}`);
-  // TODO: API integrations
-  post.status = "published";
-  await post.save();
+    console.log(`Publishing post: ${post._id}`);
+    // TODO: API integrations (publish to social platforms)
+    post.status = "published";
+    await post.save();
+  } catch (err) {
+    console.error("Error in publish post job:", err);
+    throw err;
+  }
 });
+
+// Delete a post 24 hours after it was marked published
+agenda.define("delete-published-post", async (job) => {
+  const { postId } = job.attrs.data;
+
+  try {
+    const post = await Post.findById(postId);
+    if (!post) {
+      console.warn(`delete-published-post: post ${postId} not found`);
+      return;
+    }
+
+    // Delete any base64 or stored media inside the DB
+    if (post.media && post.media.length) {
+      console.log("Cleaning media for post:", postId);
+      post.media = [];  // wipe media array
+    }
+
+    await post.deleteOne();
+    console.log(`🗑️ Deleted post ${postId} after 24 hours`);
+  } catch (err) {
+    console.error("Error deleting post:", err);
+  }
+});
+
+// start agenda once
+(async function startAgenda() {
+  try {
+    await agenda.start();
+    console.log("Agenda started");
+    agenda.on("ready", () =>
+      console.log("✅ Agenda is ready and connected to MongoDB")
+    );
+    agenda.on("error", (err) =>
+      console.error("❌ Agenda connection error:", err)
+    );
+  } catch (err) {
+    console.error("Failed to start Agenda:", err);
+  }
+})();
 
 // Schedule when creating a post
 async function schedulePost(post) {
-  await agenda.start();
-  await agenda.schedule(post.scheduled_at, "publish post", { postId: post._id });
+  try {
+    const when = post.scheduled_at ? new Date(post.scheduled_at) : null;
+    if (!when || isNaN(when.getTime())) {
+      throw new Error("Invalid scheduled_at date");
+    }
+
+    // create job with uniqueness on postId to avoid duplicates
+    const job = agenda.create("publish post", { postId: String(post._id) });
+    job.unique({ "data.postId": String(post._id) });
+    job.schedule(when);
+    await job.save();
+
+    console.log(
+      `Scheduled publish post job for ${post._id} at ${when.toISOString()}`
+    );
+    return job;
+  } catch (err) {
+    console.error("Failed to schedule post:", err);
+    throw err;
+  }
 }
+
+// graceful shutdown
+process.on("SIGTERM", async () => {
+  console.log("SIGTERM received, stopping Agenda...");
+  await agenda.stop();
+  process.exit(0);
+});
 
 module.exports = { agenda, schedulePost };

@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, default: "user" }, // can be "admin" later
   createdAt: { type: Date, default: Date.now },
+  auto_follow_up_enabled: { type: Boolean, default: false },
+  auto_follow_up_start_date: { type: Date, default: null },
 });
 
 // Hash password before saving

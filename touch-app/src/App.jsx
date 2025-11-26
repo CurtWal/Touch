@@ -19,6 +19,7 @@ import {
   Link,
 } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
+import { SocialAccountsPage } from "./components/SocialAccountsPage";
 
 function Layout() {
   window.onscroll = () => {
@@ -94,8 +95,8 @@ function Layout() {
     <>
       <div>
         <header class="header">
-          <h4>Touch</h4>
-          <nav class="navbar" style={{ display: "inline-flex", gap: "15px" }}>
+          <h1>Touch</h1>
+          <nav class="navbar" style={{ display: "inline-flex", gap: "15px", fontSize: "30px" }}>
             
             <Link to="/" className="!text-black hover:!text-red-500">
               Home
@@ -129,6 +130,7 @@ function Layout() {
                   <Route path="/register" element={<Register />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/" element={<Home isLoggedIn={isLoggedIn}/>} />
+                   <Route path="/social-accounts" element={<SocialAccountsPage />} />
                 </Routes></div>
     </>
   );

@@ -23,6 +23,7 @@ const contactSchema = new mongoose.Schema({
   country: String,
   timezone: String,
   lastInteraction: Date,
+  last_followup_sent: Date,
 });
 
 module.exports = mongoose.model("Contact", contactSchema);

@@ -13,7 +13,7 @@ function AiChat() {
     try {
       const token = localStorage.getItem("token");
       const response = await axios.post(
-        "https://touch-six.vercel.app/api/chat",
+        "http://localhost:3000/api/chat",
         { message },
         {
           headers: {

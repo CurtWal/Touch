@@ -39,7 +39,7 @@ function Upload() {
     const userId = localStorage.getItem("userId");
     if (!userId) return;
     setLoading(true);
-    fetch(`https://touch-six.vercel.app/crm/${userId}`, {
+    fetch(`http://localhost:3000/crm/${userId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -59,7 +59,7 @@ function Upload() {
     const userId = localStorage.getItem("userId");
     const formData = new FormData();
     formData.append("file", file);
-    fetch("https://touch-six.vercel.app//crm-upload", {
+    fetch("http://localhost:3000/crm-upload", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
@@ -68,7 +68,7 @@ function Upload() {
       .then((data) => {
         if (data.error) throw new Error(data.error);
         // After upload, fetch latest CRM data and overwrite formRows
-        return fetch(`https://touch-six.vercel.app//crm/${userId}`, {
+        return fetch(`http://localhost:3000/crm/${userId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
       })
@@ -101,10 +101,56 @@ function Upload() {
     setNewRow(FIELDS.reduce((acc, key) => ({ ...acc, [key]: "" }), {}));
   };
 
-  const handleRemoveRow = (idx) => {
-    setFormRows((prev) => prev.filter((_, i) => i !== idx));
+const handleRemoveRow = async (idx) => {
+    const row = formRows[idx];
+    // if row was already saved to DB (has _id), delete server-side
+    if (row && row._id) {
+      const confirmDelete = window.confirm("Delete this contact from your CRM?");
+      if (!confirmDelete) return;
+      const token = localStorage.getItem("token");
+      try {
+        const res = await fetch(`http://localhost:3000/crm/${row._id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Failed to delete contact");
+        }
+        // remove locally after successful delete
+        setFormRows((prev) => prev.filter((_, i) => i !== idx));
+        setCrmData((prev) => prev.filter((c) => c._id !== row._id));
+      } catch (err) {
+        setError(err.message || "Failed to delete contact");
+      }
+    } else {
+      // local-only unsaved row: just remove it
+      setFormRows((prev) => prev.filter((_, i) => i !== idx));
+    }
   };
 
+  const handleDeleteAll = async () => {
+    const confirmDelete = window.confirm(
+      "Delete ALL contacts in your CRM? This cannot be undone."
+    );
+    if (!confirmDelete) return;
+    const token = localStorage.getItem("token");
+    try {
+      const res = await fetch(`http://localhost:3000/crm`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to delete contacts");
+      }
+      // clear local state
+      setFormRows([]);
+      setCrmData([]);
+    } catch (err) {
+      setError(err.message || "Failed to delete contacts");
+    }
+  };
   const handleSaveRows = async () => {
     const token = localStorage.getItem("token");
     const userId = localStorage.getItem("userId");
@@ -113,7 +159,7 @@ function Upload() {
     if (newRows.length === 0) return;
 
     try {
-      const res = await fetch("https://touch-six.vercel.app/crm-add", {
+      const res = await fetch("http://localhost:3000/crm-add", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -153,6 +199,11 @@ function Upload() {
             <td colSpan={FIELDS.length} style={{ textAlign: "right" }}>
               <button type="submit">Add Row</button>
             </td>
+            <td style={{ textAlign: "right" }}>
+          <button type="button" onClick={handleDeleteAll} style={{ color: "red" }}>
+            Delete All CRM
+          </button>
+        </td>
           </tr>
           <thead>
             <tr>

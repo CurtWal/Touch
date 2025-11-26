@@ -3,6 +3,8 @@ const app = express();
 const port = 3000;
 const fileUpload = require("express-fileupload");
 const cors = require("cors");
+const path = require("path");
+const fs = require("fs");
 const xlsx = require("xlsx");
 const mongoose = require("mongoose");
 const postRoutes = require("./routes/post");
@@ -13,6 +15,15 @@ const twilio = require("twilio");
 const Contact = require("./models/Contacts");
 const { verifyToken } = require("./routes/auth");
 const Auth = require("./routes/auth");
+const Command = require("./routes/command");
+const userSettingsRoute = require("./routes/user");
+const autoFollowUpRoute = require("./routes/autoFollowUp");
+const ContactsInfo = require("./routes/contacts");
+const platformAuthRoutes = require("./routes/platformAuth");
+const OAuthRoutes = require("./routes/oAuth");
+const jwt = require("jsonwebtoken");
+const n8nPostScheduleRoutes = require("./routes/n8nPostSchedule");
+const multer = require("multer");
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -24,9 +35,27 @@ const mg = mailgun.client({ username: "api", key: process.env.MAILGUN_KEY });
 // import agenda (if using agenda for scheduling)
 const { agenda } = require("./jobs/agendaScheduler");
 require("dotenv").config();
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:3001",
+      process.env.FRONTEND_URL
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "DELETE", "PUT", "PATCH"],
+  })
+);
 app.use(express.json());
 app.use(fileUpload());
+app.use(userSettingsRoute);
+
+// ensure uploads dir exists
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+// serve uploads
+app.use("/uploads", express.static(uploadsDir));
 
 app.get("/", (req, res) => {
   res.send("Hello World");
@@ -213,32 +242,99 @@ app.post("/crm-add", verifyToken, async (req, res) => {
     res.status(500).json({ error: "Failed to add contacts" });
   }
 });
+app.delete("/crm", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const result = await Contact.deleteMany({ userId });
+    return res.json({ success: true, deletedCount: result.deletedCount });
+  } catch (err) {
+    console.error("Error deleting CRM contacts:", err);
+    return res.status(500).json({ error: "Failed to delete contacts" });
+  }
+});
 
+// Delete a single contact by contact _id (only if it belongs to the authenticated user)
+app.delete("/crm/:id", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const contactId = req.params.id;
+    const deleted = await Contact.findOneAndDelete({ _id: contactId, userId });
+    if (!deleted) return res.status(404).json({ error: "Contact not found" });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Error deleting contact:", err);
+    return res.status(500).json({ error: "Failed to delete contact" });
+  }
+});
 
 // ---------------- SEND MESSAGE ROUTE ----------------
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-app.post("/send-message", verifyToken, async (req, res) => {
+app.post("/send-message", async (req, res) => {
   try {
-    const { type, name, names, message, sendToAll } = req.body;
-    const userId = req.user.id;
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.split(" ")[1];
+    if (!token) return res.status(401).json({ error: "No auth token" });
 
-    if (!type || !message) {
-      return res.status(400).json({
-        error: "Missing required fields: type or message",
-      });
+    let isService = false;
+    let verifiedUserId = null;
+
+    // Try verify as service token first
+    try {
+      const svcPayload = jwt.verify(token, process.env.SERVER_JWT_SECRET || process.env.JWT_SECRET);
+      if (svcPayload && svcPayload.service === "autoFollowUp") {
+        isService = true;
+        verifiedUserId = svcPayload.userId || svcPayload.id || null;
+      }
+    } catch (e) {
+      // not a service token, fall through
     }
 
-    // 🔹 If user wants to send to all contacts
+    // If not a service token, verify as user JWT
+    if (!isService) {
+      try {
+        const userPayload = jwt.verify(token, process.env.JWT_SECRET);
+        verifiedUserId = userPayload.id || userPayload.userId || userPayload._id;
+        if (!verifiedUserId) return res.status(403).json({ error: "Invalid user token" });
+      } catch (err) {
+        return res.status(403).json({ error: "Invalid token" });
+      }
+    }
+
+    // use verifiedUserId (may be null for some service flows)
+    const { type, name, names, message, sendToAll, contactId } = req.body;
+    const userId = verifiedUserId;
+    console.log("/send-message called", { isService, verifiedUserId, type, contactId, sendToAll, names });
+
+
+    if (!type || !message) {
+      return res.status(400).json({ error: "Missing required fields: type or message" });
+    }
+
+    // If service token + contactId -> single send to that contact (no userId required)
+    if (isService && contactId) {
+      const contact = await Contact.findById(contactId);
+      if (!contact) {
+        console.warn("/send-message: contact not found for id:", contactId);
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      
+      await sendSingleMessage(contact, type, message);
+      return res.json({ success: true, message: `✅ ${type.toUpperCase()} sent to ${contact.email || contact.phone}` });
+    }
+
+    // If sendToAll (requires user context)
     if (sendToAll) {
+      if (!userId) return res.status(403).json({ error: "sendToAll requires authenticated user" });
       const contacts = await Contact.find({ userId });
       return await sendBatchMessages(contacts, type, message, res);
     }
 
-    // 🔹 If user provides a list of names
+    // If names array provided (requires user context)
     if (Array.isArray(names) && names.length > 0) {
+      if (!userId) return res.status(403).json({ error: "names list requires authenticated user" });
       const contacts = await Contact.find({
         userId,
         $or: names.map((n) => ({
@@ -257,15 +353,12 @@ app.post("/send-message", verifyToken, async (req, res) => {
         })),
       });
 
-      if (!contacts.length)
-        return res.status(404).json({ error: "No matching contacts found." });
-
+      if (!contacts.length) return res.status(404).json({ error: "No matching contacts found." });
       return await sendBatchMessages(contacts, type, message, res);
     }
 
-    // 🔹 Single name fallback
-    if (!name)
-      return res.status(400).json({ error: "Missing contact name or names list." });
+    // Single-name fallback (requires user context)
+    if (!name) return res.status(400).json({ error: "Missing contact name or names list." });
 
     const contact = await Contact.findOne({
       userId,
@@ -283,14 +376,13 @@ app.post("/send-message", verifyToken, async (req, res) => {
       ],
     });
 
-    if (!contact)
-      return res.status(404).json({ error: `No contact found for ${name}` });
+    if (!contact) return res.status(404).json({ error: `No contact found for ${name}` });
 
     await sendSingleMessage(contact, type, message);
     return res.json({ success: true, message: `✅ ${type.toUpperCase()} sent to ${contact.email || contact.phone}` });
   } catch (error) {
     console.error("❌ Error sending message:", error);
-    res.status(500).json({ error: "Failed to send message", details: error.message });
+    return res.status(500).json({ error: "Failed to send message", details: error.message });
   }
 });
 
@@ -352,10 +444,16 @@ async function sendBatchMessages(contacts, type, message, res) {
 }
 
 
-
+app.use("/", autoFollowUpRoute);
 app.use("/api/posts", postRoutes);
 app.use("/", aiAgentChatRoutes);
 app.use("/", Auth.router);
+app.use("/", Command);
+app.use("/", ContactsInfo);
+app.use(platformAuthRoutes);
+app.use(OAuthRoutes);
+app.use("/", n8nPostScheduleRoutes);
+
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("Connected to Mongoose"))
@@ -367,4 +465,17 @@ mongoose
 
 app.listen(port, () => {
   console.log(`server is running on port ${port}`);
+});
+
+// error handler (place after all routes)
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err && err.stack ? err.stack : err);
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ error: "Upload error", message: err.message });
+  }
+  // busboy / parsing errors often arrive as generic Error
+  if (err && err.message && err.message.includes("Unexpected end of form")) {
+    return res.status(400).json({ error: "Malformed multipart request", message: err.message });
+  }
+  res.status(500).json({ error: err?.message || "Server error" });
 });
