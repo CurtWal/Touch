@@ -8,6 +8,7 @@ import  LinkedInSection  from "./LinkedInSection";
 import PostBulkUpload from "./PostBulkUpload";
 import PostForm from "./PostForm";
 import PostList from "./PostList";
+import CalendarPage from "./CalendarPage";
 
 export default function Home({isLoggedIn}) {
     return (
@@ -23,8 +24,9 @@ export default function Home({isLoggedIn}) {
             <Upload />
             <CommandSender />
             <LinkedInSection />
-            <PostBulkUpload />
-            <PostList />
+            <CalendarPage />
+            {/* <PostBulkUpload />
+            <PostList /> */}
             </>
             )}
             

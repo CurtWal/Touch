@@ -17,23 +17,26 @@ function Register() {
         }
     };  
     return (
-        <form onSubmit={handleRegister}>
+        <div className='dark:text-white p-4 max-w-md mx-auto mt-10 border rounded bg-white dark:bg-gray-800'>
+        <form onSubmit={handleRegister} className=' flex flex-col gap-4'>
             <h2>Register</h2>
-            <div>
-                <label>Name:</label>
-                <input type="text" name="name" required />
+            <div className='flex flex-col gap-4'>
+            <div className='flex flex-col'>
+                <label className='flex justify-start'>Name:</label>
+                <input className=" bg-gray-300 text-black" type="text" name="name" required />
             </div>
-            <div>
-                <label>Email:</label>
-                <input type="email" name="email" required />
+            <div className='flex flex-col'>
+                <label className='flex justify-start'>Email:</label>
+                <input className=" bg-gray-300 text-black" type="email" name="email" required />
             </div>
-            <div>
-
-                <label>Password:</label>
-                <input type="password" name="password" required />
+            <div className='flex flex-col'>
+                <label className='flex justify-start'>Password:</label>
+                <input className=" bg-gray-300 text-black" type="password" name="password" required />
+            </div>
             </div>
             <button type="submit">Register</button>
         </form>
+        </div>
     );
 }
 export default Register;

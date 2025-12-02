@@ -2,89 +2,68 @@ import React, { useCallback, useState, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 
 const FIELDS = [
-  "first_name",
-  "last_name",
-  "email",
-  "phone",
-  "company",
-  "city",
-  "state",
-  "country",
-  "timezone",
-  "linkedin_url",
-  "instagram_handle",
-  "facebook_url",
-  "tiktok_handle",
-  "sms_opt_in",
-  "email_opt_in",
-  "messaging_opt_in",
-  "quiet_hours_start",
-  "quiet_hours_end",
-  "tags",
-  "notes",
+  "first_name", "last_name", "email", "phone", "company",
+  "city", "state", "country", "timezone",
+  "linkedin_url", "instagram_handle", "facebook_url", "tiktok_handle",
+  "sms_opt_in", "email_opt_in", "messaging_opt_in",
+  "quiet_hours_start", "quiet_hours_end", "tags", "notes",
 ];
 
-function Upload() {
+export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [formRows, setFormRows] = useState([]);
-  const [crmData, setCrmData] = useState([]);
   const [newRow, setNewRow] = useState(
     FIELDS.reduce((acc, key) => ({ ...acc, [key]: "" }), {})
   );
 
-  // Fetch CRM data on mount
+  /** ─── Fetch CRM on load ─────────────────────── */
   useEffect(() => {
     const token = localStorage.getItem("token");
     const userId = localStorage.getItem("userId");
     if (!userId) return;
+
     setLoading(true);
     fetch(`http://localhost:3000/crm/${userId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
-      .then((contacts) => {
-        setFormRows(contacts); // <-- overwrite instead of merge
-        setCrmData(contacts);
-      })
+      .then((contacts) => setFormRows(contacts))
       .catch(() => setError("Failed to fetch CRM data"))
       .finally(() => setLoading(false));
   }, []);
 
+  /** ─── Drag & Drop CSV Upload ─────────────────── */
   const onDrop = useCallback((acceptedFiles) => {
-    setLoading(true);
-    setError(null);
     const file = acceptedFiles[0];
     const token = localStorage.getItem("token");
     const userId = localStorage.getItem("userId");
+
     const formData = new FormData();
     formData.append("file", file);
+
     fetch("http://localhost:3000/crm-upload", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
     })
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        // After upload, fetch latest CRM data and overwrite formRows
-        return fetch(`http://localhost:3000/crm/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      })
       .then((res) => res.json())
-      .then((contacts) => {
-        setFormRows(contacts); // <-- overwrite instead of merge
-        setCrmData(contacts);
-      })
-      .catch((error) => setError(error.message))
-      .finally(() => setLoading(false));
+      .then(() =>
+        fetch(`http://localhost:3000/crm/${userId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      )
+      .then((res) => res.json())
+      .then((contacts) => setFormRows(contacts))
+      .catch(() => setError("Failed to upload CRM file"));
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
+  /** ─── Input Updates ─────────────────────────── */
   const handleInputChange = (e, idx) => {
     const { name, value } = e.target;
+
     setFormRows((prev) =>
       prev.map((row, i) => (i === idx ? { ...row, [name]: value } : row))
     );
@@ -101,56 +80,7 @@ function Upload() {
     setNewRow(FIELDS.reduce((acc, key) => ({ ...acc, [key]: "" }), {}));
   };
 
-const handleRemoveRow = async (idx) => {
-    const row = formRows[idx];
-    // if row was already saved to DB (has _id), delete server-side
-    if (row && row._id) {
-      const confirmDelete = window.confirm("Delete this contact from your CRM?");
-      if (!confirmDelete) return;
-      const token = localStorage.getItem("token");
-      try {
-        const res = await fetch(`http://localhost:3000/crm/${row._id}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || "Failed to delete contact");
-        }
-        // remove locally after successful delete
-        setFormRows((prev) => prev.filter((_, i) => i !== idx));
-        setCrmData((prev) => prev.filter((c) => c._id !== row._id));
-      } catch (err) {
-        setError(err.message || "Failed to delete contact");
-      }
-    } else {
-      // local-only unsaved row: just remove it
-      setFormRows((prev) => prev.filter((_, i) => i !== idx));
-    }
-  };
-
-  const handleDeleteAll = async () => {
-    const confirmDelete = window.confirm(
-      "Delete ALL contacts in your CRM? This cannot be undone."
-    );
-    if (!confirmDelete) return;
-    const token = localStorage.getItem("token");
-    try {
-      const res = await fetch(`http://localhost:3000/crm`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to delete contacts");
-      }
-      // clear local state
-      setFormRows([]);
-      setCrmData([]);
-    } catch (err) {
-      setError(err.message || "Failed to delete contacts");
-    }
-  };
+  /** ─── Save ALL new rows to DB ───────────────── */
   const handleSaveRows = async () => {
     const token = localStorage.getItem("token");
     const userId = localStorage.getItem("userId");
@@ -158,119 +88,174 @@ const handleRemoveRow = async (idx) => {
 
     if (newRows.length === 0) return;
 
-    try {
-      const res = await fetch("http://localhost:3000/crm-add", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ userId, contacts: newRows }),
-      });
-      const result = await res.json();
-      if (result.success) {
-        // Remove _unsaved flag from saved rows
-        setFormRows((prev) => prev.map((row) => ({ ...row, _unsaved: false })));
-        // Optionally, refetch CRM data
-      } else {
-        setError(result.error || "Failed to save rows");
-      }
-    } catch (err) {
-      setError("Failed to save rows");
+    const res = await fetch("http://localhost:3000/crm-add", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ userId, contacts: newRows }),
+    });
+
+    const result = await res.json();
+    if (result.success) {
+      setFormRows((prev) =>
+        prev.map((row) => ({ ...row, _unsaved: false }))
+      );
     }
   };
+
+  /** ─── Delete Single Row ─────────────────────── */
+  const handleRemoveRow = async (idx) => {
+    const row = formRows[idx];
+    const token = localStorage.getItem("token");
+
+    if (row?._id) {
+      await fetch(`http://localhost:3000/crm/${row._id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+
+    setFormRows((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  /** ─── Delete ALL ─────────────────────────────── */
+  const handleDeleteAll = async () => {
+    const confirmDelete = window.confirm("Delete ALL CRM entries?");
+    if (!confirmDelete) return;
+
+    const token = localStorage.getItem("token");
+
+    await fetch(`http://localhost:3000/crm`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    setFormRows([]);
+  };
+
+  /** ────────────────────────────────────────────── */
+
   return (
-    <div>
-      {loading && <p>Loading...</p>}
-      {error && <p style={{ color: "red" }}>Error: {error}</p>}
-      <h2>Uploaded Data (Form Table):</h2>
-      <form onSubmit={handleAddRow}>
-        <table
-          border="1"
-          cellPadding="5"
-          style={{ borderCollapse: "collapse", width: "100%" }}
-        >
-          <tr>
-            <td colSpan={FIELDS.length} style={{ textAlign: "right" }}>
-              <button type="button" onClick={handleSaveRows}>
+    <div className="p-6">
+      {loading && <p className="text-gray-500">Loading...</p>}
+      {error && <p className="text-red-500">{error}</p>}
+
+      <h2 className="text-2xl font-semibold mb-4">CRM Contacts</h2>
+
+     <div className="w-full mt-4">
+  {/* Scroll Container */}
+  <div className="overflow-x-auto overflow-y-auto max-h-[75vh] border rounded-lg shadow-sm">
+    <table className="min-w-max border-collapse text-sm">
+      
+      {/* TOP BUTTON ROW */}
+      <thead className="sticky top-0 bg-white z-20 shadow-sm">
+        <tr>
+          <th colSpan={FIELDS.length + 1} className="p-3 border-b border-gray-300">
+            <div className="flex items-center justify-start gap-3">
+              <button
+                type="button"
+                onClick={handleSaveRows}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+              >
                 Save New Rows
               </button>
+
+              <button
+                type="button"
+                onClick={handleAddRow}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
+              >
+                Add Row
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDeleteAll}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition"
+              >
+                Delete All CRM
+              </button>
+            </div>
+          </th>
+        </tr>
+
+        {/* HEADER ROW */}
+        <tr className="bg-gray-50">
+          {FIELDS.map((key) => (
+            <th
+              key={key}
+              className="px-3 py-2 border border-gray-300 text-left font-medium text-gray-700 whitespace-nowrap"
+            >
+              {key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+            </th>
+          ))}
+          <th className="px-3 py-2 border border-gray-300 text-left font-medium text-gray-700 whitespace-nowrap">Actions</th>
+        </tr>
+      </thead>
+
+      {/* NEW ROW INPUT */}
+      <tbody>
+        {/* <tr className="bg-green-50">
+          {FIELDS.map((key) => (
+            <td key={key} className="border border-gray-300 p-2">
+              <input
+                type="text"
+                name={key}
+                value={newRow[key]}
+                onChange={handleNewRowChange}
+                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:outline-none text-sm"
+              />
             </td>
-            <td colSpan={FIELDS.length} style={{ textAlign: "right" }}>
-              <button type="submit">Add Row</button>
-            </td>
-            <td style={{ textAlign: "right" }}>
-          <button type="button" onClick={handleDeleteAll} style={{ color: "red" }}>
-            Delete All CRM
-          </button>
-        </td>
-          </tr>
-          <thead>
-            <tr>
-              {FIELDS.map((key) => (
-                <th key={key}>
-                  {key
-                    .replace(/_/g, " ")
-                    .replace(/\b\w/g, (l) => l.toUpperCase())}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              {FIELDS.map((key) => (
-                <td key={key}>
-                  <input
-                    type="text"
-                    name={key}
-                    value={newRow[key]}
-                    onChange={handleNewRowChange}
-                    style={{ width: "100%" }}
-                  />
-                </td>
-              ))}
-            </tr>
-            {formRows.map((row, idx) => (
-              <tr key={idx}>
-                {FIELDS.map((key) => (
-                  <td key={key}>
-                    <input
-                      type="text"
-                      name={key}
-                      value={row[key] !== undefined ? row[key] : ""}
-                      onChange={(e) => handleInputChange(e, idx)}
-                      style={{ width: "100%" }}
-                    />
-                  </td>
-                ))}
-                <td>
-                  <button type="button" onClick={() => handleRemoveRow(idx)}>
-                    Remove
-                  </button>
-                </td>
-              </tr>
+          ))}
+          <td className="border border-gray-300 p-2 text-center">—</td>
+        </tr> */}
+
+        {/* ROWS FROM DATABASE */}
+        {formRows.map((row, idx) => (
+          <tr key={idx} className="hover:bg-blue-500 bg-white" >
+            {FIELDS.map((key) => (
+              <td key={key} className="border border-gray-300 p-2 text-black">
+                <input
+                  type="text"
+                  name={key}
+                  value={row[key] ?? ""}
+                  onChange={(e) => handleInputChange(e, idx)}
+                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:outline-none text-sm"
+                />
+              </td>
             ))}
-          </tbody>
-        </table>
-      </form>
-      <div
-        {...getRootProps()}
-        style={{
-          marginTop: 16,
-          border: "2px dashed #888",
-          padding: 16,
-          textAlign: "center",
-          cursor: "pointer",
-        }}
-      >
-        <input {...getInputProps()} />
-        {isDragActive ? (
-          <p>Drop the files here ...</p>
-        ) : (
-          <p>Drag 'n' drop some files here, or click to select files</p>
-        )}
-      </div>
+
+            {/* REMOVE BUTTON */}
+            <td className="border border-gray-300 p-2 text-center">
+              <button
+                type="button"
+                onClick={() => handleRemoveRow(idx)}
+                className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition"
+              >
+                Remove
+              </button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  {/* FILE DROPZONE */}
+  <div
+    {...getRootProps()}
+    className="mt-4 border-2 border-dashed border-gray-400 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition bg-white"
+  >
+    <input {...getInputProps()} />
+    {isDragActive ? (
+      <p className="text-blue-600 font-medium">Drop the files here...</p>
+    ) : (
+      <p className="text-gray-700">Drag & drop CSV/Excel here, or click to select</p>
+    )}
+  </div>
+</div>
     </div>
   );
 }
-export default Upload;

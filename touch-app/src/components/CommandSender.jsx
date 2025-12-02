@@ -37,8 +37,8 @@ function CommandSender() {
   };
 
   return (
-    <div style={{ maxWidth: 700, margin: "2rem auto" }}>
-      <h2>AI Broadcast Command</h2>
+    <div style={{ maxWidth: 700, margin: "2rem auto" }} className="p-4 border rounded bg-white">
+      <h2 className="text-black">AI Broadcast Command Based on CRM contacts</h2>
       <input
         type="text"
         value={command}
@@ -46,16 +46,18 @@ function CommandSender() {
         placeholder='e.g. "Send message to all high priority contacts"'
         style={{ width: "100%", padding: "10px", fontSize: "16px" }}
         disabled={loading}
+        className="border rounded px-3 py-2 mt-2 text-black"
       />
       <button
+       className="ml-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
         onClick={handleCommand}
         disabled={loading}
         style={{ marginTop: "10px", padding: "10px 20px", fontSize: "16px" }}
       >
         {loading ? "Processing..." : "Execute Command"}
-      </button>
+      </button >
       {output && (
-        <div style={{ marginTop: "20px", background: "lightgray", padding: "10px" }}>
+        <div style={{ marginTop: "20px", whiteSpace: "pre-wrap" }} className="mt-4 p-3 border rounded bg-gray-50 text-black">
           <strong>Result:</strong>
           <p>{output}</p>
         </div>

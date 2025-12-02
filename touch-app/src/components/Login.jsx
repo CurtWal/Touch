@@ -29,18 +29,22 @@ function Login() {
         }   
     };
     return (
-        <form onSubmit={handleLogin}>   
-            <h2>Login</h2>
-            <div>
-                <label>Email:</label>
-                <input type="email" name="email" required />
+        <div className='dark:text-white p-4 max-w-md mx-auto mt-10 border rounded bg-white dark:bg-gray-800'>
+        <form onSubmit={handleLogin} className=' flex flex-col gap-4'>   
+            <h2 className=''>Login</h2>
+            <div className='flex flex-col gap-4'>
+            <div className='flex flex-col'>
+                <label className='flex justify-start'>Email:</label>
+                <input className=" bg-gray-300 text-black" type="email" name="email" required />
             </div>
-            <div>
-                <label>Password:</label>
-                <input type="password" name="password" required />
+            <div className='flex flex-col'>
+                <label className="flex justify-start">Password:</label>
+                <input className=" bg-gray-300 text-black" type="password" name="password" required />
+            </div>
             </div>
             <button type="submit">Login</button>
         </form>
+        </div>
     );
 }
 export default Login;

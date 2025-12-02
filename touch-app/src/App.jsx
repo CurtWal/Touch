@@ -98,14 +98,14 @@ function Layout() {
           <h1>Touch</h1>
           <nav class="navbar" style={{ display: "inline-flex", gap: "15px", fontSize: "30px" }}>
             
-            <Link to="/" className="!text-black hover:!text-red-500">
+            <Link to="/" className="!text-white hover:!text-red-500">
               Home
             </Link> 
             {isLoggedIn && (
               <div style={{ display: "inline-flex",  }}>
                 <p
                   onClick={logout}
-                  className="!text-black hover:!text-red-500 cursor-pointer font-semibold w-15"
+                  className="!text-white hover:!text-red-500 cursor-pointer font-semibold w-15"
                 >
                   Logout
                 </p>
@@ -113,10 +113,10 @@ function Layout() {
             )}
             {!isLoggedIn && (
               <div style={{ display: "inline-flex", gap: "15px" }}> 
-                <Link to="/login" className="!text-black hover:!text-red-500">
+                <Link to="/login" className="!text-white hover:!text-red-500">
               Login
             </Link>
-            <Link to="/register" className="!text-black hover:!text-red-500">
+            <Link to="/register" className="!text-white hover:!text-red-500">
               Register
             </Link> 
               </div>
