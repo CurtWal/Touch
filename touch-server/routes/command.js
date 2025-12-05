@@ -30,7 +30,7 @@ async function processCommand(command, userId, token) {
   let parsed;
   try {
     parsed = JSON.parse(clean);
-    console.log("🧠 Parsed AI reply:", parsed);
+    //console.log("🧠 Parsed AI reply:", parsed);
   } catch (e) {
     console.error("❌ Failed to parse AI reply:", clean);
 
@@ -68,7 +68,7 @@ async function processCommand(command, userId, token) {
           message: c.message,
         };
 
-        console.log(`📤 Sending ${messageType.toUpperCase()} to ${c.name}`);
+        //console.log(`📤 Sending ${messageType.toUpperCase()} to ${c.name}`);
 
         try {
           await axios.post("http://localhost:3000/send-message", sendBody, {
@@ -88,10 +88,10 @@ async function processCommand(command, userId, token) {
 try {
   agenda.define("process command", async (job) => {
     const { command, userId, token } = job.attrs.data;
-    console.log("⚙️ Running process command job:", { command, userId });
+    //console.log("⚙️ Running process command job:", { command, userId });
     try {
       await processCommand(command, userId, token);
-      console.log("✅ processCommand finished successfully");
+      //console.log("✅ processCommand finished successfully");
     } catch (err) {
       console.error("Agenda job process command failed:", err.message || err);
       // optionally persist a job error record / notify user

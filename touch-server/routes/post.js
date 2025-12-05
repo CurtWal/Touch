@@ -1,6 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const xlsx = require("xlsx");
+const axios = require("axios");
 const Post = require("../models/Post");
 const { schedulePost } = require("../jobs/agendaScheduler");
 const { verifyToken } = require("./auth");
@@ -29,6 +30,80 @@ const uploadMedia = multer({
     cb(null, true);
   },
 });
+
+async function downloadImageToMedia(url) {
+  try {
+    const response = await axios.get(url, { responseType: "arraybuffer" });
+
+    const contentType = response.headers["content-type"] || "image/jpeg";
+
+    const media = new Media({
+      data: Buffer.from(response.data),
+      mimeType: contentType,
+      filename: url.split("/").pop() || "image.jpg",
+    });
+
+    const saved = await media.save();
+    return saved._id;
+  } catch (err) {
+    console.error("Failed to download image:", url, err.message);
+    return null;
+  }
+}
+function parseDateAndTime(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return null;
+
+  // Normalize date
+  const parsedDate = new Date(dateStr);
+  if (isNaN(parsedDate)) {
+    throw new Error(`Invalid date format: ${dateStr}`);
+  }
+
+  let hours = 0;
+  let minutes = 0;
+
+  timeStr = timeStr.trim().toLowerCase();
+
+  // Handle “8pm”, "8:00pm", “08:00 PM”, etc.
+  const timeRegex = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/;
+  const match = timeStr.match(timeRegex);
+
+  if (!match) {
+    throw new Error(`Invalid time format: ${timeStr}`);
+  }
+
+  hours = parseInt(match[1], 10);
+  minutes = match[2] ? parseInt(match[2], 10) : 0;
+  const ampm = match[3];
+
+  // Convert 12hr → 24hr if needed
+  if (ampm) {
+    if (ampm === "pm" && hours < 12) hours += 12;
+    if (ampm === "am" && hours === 12) hours = 0;
+  }
+
+  // Build final ISO datetime
+  const finalDate = new Date(parsedDate);
+  finalDate.setHours(hours, minutes, 0, 0);
+
+  return finalDate.toISOString();
+}
+function excelDateToJSDate(serial) {
+  // Excel epoch starts on Jan 1, 1900
+  const excelEpoch = new Date(1899, 11, 30);
+  return new Date(excelEpoch.getTime() + serial * 86400000);
+}
+
+function excelTimeToString(serial) {
+  let totalSeconds = Math.round(86400 * serial);
+  let hours = Math.floor(totalSeconds / 3600);
+  totalSeconds %= 3600;
+  let minutes = Math.floor(totalSeconds / 60);
+
+  return `${hours.toString().padStart(2, "0")}:${minutes
+    .toString()
+    .padStart(2, "0")}`;
+}
 
 // create single post (require auth and set createdBy)
 router.post("/", verifyToken, async (req, res) => {
@@ -62,45 +137,74 @@ router.post("/", verifyToken, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
+const uploadSingle = multer({ storage: multer.memoryStorage() }).single("file");
 // bulk upload CSV/XLSX
-router.post("/upload", async (req, res) => {
+router.post("/upload", verifyToken, async (req, res) => {
   try {
-    if (!req.files || !req.files.file)
-      return res.status(400).send("file missing");
+    if (!req.files || !req.files.file) {
+      return res.status(400).send("File missing");
+    }
+
     const file = req.files.file;
-    const wb = xlsx.read(file.data, { type: "buffer" });
-    const sheet = wb.SheetNames[0];
-    const rows = xlsx.utils.sheet_to_json(wb.Sheets[sheet], { defval: "" });
+    const workbook = xlsx.read(file.data, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = xlsx.utils.sheet_to_json(sheet, { defval: "" });
+    console.log("Parsed rows:", rows);
 
     const created = [];
+
     for (const r of rows) {
-      // expected CSV columns: platforms, body_text, media, first_comment, scheduled_at
-      const p = {
-        platforms: String(r.platforms || "")
+      const row = {};
+      for (const key in r) row[key.trim()] = r[key]; // trim keys
+
+      // Download image if media_url exists
+      const mediaId = row.media_url
+        ? await downloadImageToMedia(row.media_url)
+        : null;
+
+      const postData = {
+        platforms: String(row.platforms || "")
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean),
-        body_text: r.body_text || "",
-        media: String(r.media || "")
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        first_comment: r.first_comment || "",
-        scheduled_at: r.scheduled_at ? new Date(r.scheduled_at) : null,
-        status: "draft",
+        body_text: row.body_text || "",
+        media: mediaId ? [mediaId] : [],
+        first_comment: row.first_comment || "",
+        status: "approved",
+        createdBy: req.user.id,
       };
-      const doc = await new Post(p).save();
+
+      // handle scheduled_at
+      let scheduledAt = null;
+      if (row.date || row.time) {
+        try {
+          const dateVal =
+            typeof row.date === "number"
+              ? excelDateToJSDate(row.date).toISOString().split("T")[0]
+              : row.date;
+          const timeVal =
+            typeof row.time === "number"
+              ? excelTimeToString(row.time)
+              : row.time;
+          scheduledAt = parseDateAndTime(dateVal, timeVal);
+        } catch (err) {
+          console.warn("Invalid date/time:", row.date, row.time);
+        }
+      }
+      postData.scheduled_at = scheduledAt;
+
+      const doc = await new Post(postData).save();
+      if (scheduledAt) await schedulePost(doc);
+
       created.push(doc);
     }
 
     res.json({ createdCount: created.length, created });
   } catch (err) {
-    console.error(err);
+    console.error("Bulk upload error:", err);
     res.status(500).json({ error: err.message });
   }
 });
-
 // approve & schedule (ensure only owner can approve)
 router.put("/:id/approve", verifyToken, async (req, res) => {
   try {

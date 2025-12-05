@@ -24,14 +24,14 @@ if (!agenda._definitions || !agenda._definitions["random_follow_up"]) {
       if (start && Date.now() - start.getTime() > 10 * 24 * 60 * 60 * 1000) {
         user.auto_follow_up_enabled = false;
         await user.save();
-        console.log("⛔ Auto follow-ups ended after 10 days.");
+        //console.log("⛔ Auto follow-ups ended after 10 days.");
         return;
       }
 
       const now = new Date();
       const day = now.getDay(); // 0 Sunday, 6 Saturday
       if (day === 0 || day === 6) {
-        console.log("📆 Weekend detected — no messages sent today.");
+        //console.log("📆 Weekend detected — no messages sent today.");
         return;
       }
 
@@ -44,10 +44,10 @@ if (!agenda._definitions || !agenda._definitions["random_follow_up"]) {
       });
 
       if (!contacts.length) {
-        console.log(
-          "✅ All contacts followed up — cancelling automation for user",
-          userId
-        );
+        // console.log(
+        //   "✅ All contacts followed up — cancelling automation for user",
+        //   userId
+        // );
         // await agenda.cancel({
         //   name: "random_follow_up",
         //   "data.userId": userId,
@@ -140,10 +140,10 @@ if (!agenda._definitions || !agenda._definitions["random_follow_up"]) {
           const message = (extracted.message || "").trim();
 
           if (extracted.parsed) {
-            console.log("AI returned parsed object, using parsed.message and type:", {
-              contactId: String(contact._id),
-              parsed: extracted.parsed,
-            });
+            // console.log("AI returned parsed object, using parsed.message and type:", {
+            //   contactId: String(contact._id),
+            //   parsed: extracted.parsed,
+            // });
           }
 
           if (!message) {
@@ -204,7 +204,7 @@ if (!agenda._definitions || !agenda._definitions["random_follow_up"]) {
 
           const wait = Math.max(0, randomDelay());
           if (wait > 0) {
-            console.log(`⏳ Waiting ${(wait / 60000).toFixed(1)} minutes before next send...`);
+            //console.log(`⏳ Waiting ${(wait / 60000).toFixed(1)} minutes before next send...`);
             await new Promise((r) => setTimeout(r, wait));
           } else {
             await new Promise((r) => setImmediate(r));
@@ -223,11 +223,11 @@ if (!agenda._definitions || !agenda._definitions["random_follow_up"]) {
 // Toggle endpoint saves user flag
 router.post("/api/followups/toggle", verifyToken, async (req, res) => {
   try {
-    console.log(
-      "/api/followups/toggle called - auth header:",
-      req.headers.authorization
-    );
-    console.log("verifyToken set req.user:", req.user);
+    // console.log(
+    //   "/api/followups/toggle called - auth header:",
+    //   req.headers.authorization
+    // );
+    // console.log("verifyToken set req.user:", req.user);
     const userId = req.user?.id;
     if (!userId) {
       console.warn("Unauthorized: req.user missing after verifyToken");

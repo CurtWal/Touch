@@ -64,7 +64,7 @@ function verifyToken(req, res, next) {
     if (!token) return res.status(401).json({ error: "No token provided" });
 
     const clean = token.startsWith('"') && token.endsWith('"') ? token.slice(1, -1) : token;
-    console.log("verifyToken: incoming token (decoded):", jwt.decode(clean));
+    //console.log("verifyToken: incoming token (decoded):", jwt.decode(clean));
 
     // ALWAYS use process.env.JWT_SECRET at verification time
     const secret = process.env.JWT_SECRET;

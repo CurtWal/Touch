@@ -108,7 +108,7 @@ router.get("/api/platforms/linkedin/callback", async (req, res) => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     const linkedinUserId = meRes.data?.id;
-    console.log("LinkedIn /me response:", meRes.data);
+    //console.log("LinkedIn /me response:", meRes.data);
     if (!linkedinUserId) {
       return res.status(400).json({ error: "Failed to obtain LinkedIn user id" });
     }

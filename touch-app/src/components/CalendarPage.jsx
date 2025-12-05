@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import PostForm from "./PostForm";
 import DayPostsPanel from "./DayPostsPanel";
 import axios from "axios";
+import PostBulkUpload from "./PostBulkUpload";
 
 function startOfMonth(date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -27,6 +28,18 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(null); // Date object
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const getDefaultDateTime = () => {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() + 30); // add 30 mins
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  // datetime-local expects "YYYY-MM-DDTHH:MM"
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
 
   // fetch posts (all for user) and map to date keys
   const fetchPosts = async () => {
@@ -87,7 +100,8 @@ export default function CalendarPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Schedule Calendar</h1>
-          <p className="text-sm text-gray-500">Click a date to schedule posts. Multiple posts per date supported.</p>
+          <p className="text-sm text-white-500">Click a date to schedule posts. Multiple posts per date supported.</p>
+          <PostBulkUpload onUploadSuccess={fetchPosts}/>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={prevMonth} className="px-3 py-1 rounded hover:bg-gray-100">
@@ -176,7 +190,7 @@ export default function CalendarPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
               <div>
                 <PostForm
-                  initialScheduledAt={new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), 12, 0).toISOString().slice(0,16)}
+                  initialScheduledAt={getDefaultDateTime(selectedDate)}
                   onSave={(post) => {
                     handlePostSaved(post);
                   }}

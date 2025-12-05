@@ -1,24 +1,39 @@
-// PostForm.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
 function PostForm({ onSave, initialScheduledAt = "" }) {
+  // Helper: get current time + 30 minutes formatted for datetime-local
+  const getDefaultDateTime = () => {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() + 30); // add 30 mins
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  // datetime-local expects "YYYY-MM-DDTHH:MM"
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
   const [form, setForm] = useState({
     platforms: [],
     body_text: "",
     media: [],
     first_comment: "",
-    scheduled_at: initialScheduledAt || "",
+    scheduled_at: initialScheduledAt || "", // will set dynamically below
     mediaFiles: [],
   });
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (initialScheduledAt) {
-      setForm((p) => ({ ...p, scheduled_at: initialScheduledAt }));
-    }
-  }, [initialScheduledAt]);
+  // On mount: if scheduled_at is empty, set it to current time + 30 mins
+ useEffect(() => {
+  setForm((p) => ({
+    ...p,
+    scheduled_at: initialScheduledAt || getDefaultDateTime(),
+  }));
+}, [initialScheduledAt]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -47,17 +62,13 @@ function PostForm({ onSave, initialScheduledAt = "" }) {
       const token = localStorage.getItem("token");
       const uploadedIds = [];
 
-      // Upload each file (backend returns mediaId)
       if (form.mediaFiles?.length) {
         for (const f of form.mediaFiles) {
           const fd = new FormData();
           fd.append("file", f);
           const res = await axios.post("http://localhost:3000/api/posts/upload-media", fd, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
           });
-          // backend returns { mediaId }
           uploadedIds.push(res.data.mediaId || res.data.id || res.data._id);
         }
       }
@@ -71,15 +82,12 @@ function PostForm({ onSave, initialScheduledAt = "" }) {
       };
 
       const createRes = await axios.post("http://localhost:3000/api/posts", payload, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       });
 
       const saved = createRes.data;
       if (onSave) onSave(saved);
-      // clear some fields but keep scheduled_at so user can add multiple posts same day
+
       setForm((p) => ({ ...p, body_text: "", mediaFiles: [], media: [], first_comment: "" }));
     } catch (err) {
       console.error("save post error", err);
@@ -91,7 +99,7 @@ function PostForm({ onSave, initialScheduledAt = "" }) {
 
   return (
     <form onSubmit={handleSubmit} className="p-4 border rounded bg-gray-50 text-black">
-      {error && <div className="text-sm text-red-600 mb-2 ">{error}</div>}
+      {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
 
       <textarea
         name="body_text"
@@ -126,8 +134,14 @@ function PostForm({ onSave, initialScheduledAt = "" }) {
 
       <div className="mb-3">
         <label className="block mb-1 text-sm">Attach images (jpg/png/webp, max 5MB each)</label>
-        <input className="hover:cursor-pointer" type="file" accept="image/*" multiple onChange={handleFileChange} />
-        <div className="mt-2 text-xs text-gray-500 ">
+        <input
+          className="hover:cursor-pointer"
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFileChange}
+        />
+        <div className="mt-2 text-xs text-gray-500">
           {form.mediaFiles.length > 0 && form.mediaFiles.map((f) => <div key={f.name}>{f.name}</div>)}
         </div>
       </div>
