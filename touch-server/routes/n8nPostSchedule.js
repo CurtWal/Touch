@@ -13,7 +13,59 @@ const fs = require("fs");
 const path = require("path");
 const { agenda } = require("../jobs/agendaScheduler");
 const Media = require("../models/Media");
+const FormData = require("form-data");
+const OAuth = require("oauth-1.0a");
+const crypto = require("crypto");
 
+function createOAuthHeader({
+  url,
+  method,
+  consumerKey,
+  consumerSecret,
+  token,
+  tokenSecret,
+}) {
+  const oauth = OAuth({
+    consumer: { key: consumerKey, secret: consumerSecret },
+    signature_method: "HMAC-SHA1",
+    hash_function(base, key) {
+      return crypto.createHmac("sha1", key).update(base).digest("base64");
+    },
+  });
+
+  return oauth.toHeader(
+    oauth.authorize({ url, method }, { key: token, secret: tokenSecret })
+  );
+}
+
+async function uploadMediaToTwitter(buffer, mimeType, oauthCreds) {
+  const url = "https://upload.twitter.com/1.1/media/upload.json";
+
+  const form = new FormData();
+  form.append("media", buffer, {
+    contentType: mimeType,
+    filename: "upload",
+  });
+  form.append("media_category", "tweet_image");
+
+  const oauthHeader = createOAuthHeader({
+    url,
+    method: "POST",
+    consumerKey: process.env.X_API_KEY,
+    consumerSecret: process.env.X_API_SECRET,
+    token: oauthCreds.oauthToken,
+    tokenSecret: oauthCreds.oauthTokenSecret,
+  });
+
+  const res = await axios.post(url, form, {
+    headers: {
+      ...oauthHeader,
+      ...form.getHeaders(),
+    },
+  });
+
+  return res.data.media_id_string;
+}
 
 //  Legacy upload function (old LinkedIn API) for uploading images
 // async function uploadImageToLinkedIn(imageUrl, accessToken, ownerUrn) {
@@ -96,6 +148,56 @@ async function uploadImageToLinkedIn(imageUrl, accessToken, ownerUrn) {
   return imageUrn; // <-- This is now urn:li:image:xxxx
 }
 
+async function getValidTwitterAccessToken(userId) {
+  const auth = await PlatformAuth.findOne({ userId, platform: "twitter" });
+  if (!auth) throw new Error("Twitter not connected");
+
+  // ✅ Token still valid
+  if (auth.expiresAt && auth.expiresAt > new Date()) {
+    return auth.credentials.accessToken;
+  }
+
+  // 🔐 REQUIRED Basic Auth
+  const basicAuth = Buffer.from(
+    `${process.env.X_CLIENT_ID}:${process.env.X_CLIENT_SECRET}`
+  ).toString("base64");
+
+  try {
+    const res = await axios.post(
+      "https://api.twitter.com/2/oauth2/token",
+      new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: auth.credentials.refreshToken,
+      }),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Basic ${basicAuth}`,
+        },
+      }
+    );
+
+    auth.credentials.accessToken = res.data.access_token;
+
+    if (res.data.refresh_token) {
+      auth.credentials.refreshToken = res.data.refresh_token;
+    }
+
+    auth.expiresAt = new Date(Date.now() + res.data.expires_in * 1000);
+    auth.refreshedAt = new Date();
+
+    await auth.save();
+
+    return auth.credentials.accessToken;
+  } catch (err) {
+    console.error(
+      "Twitter token refresh failed:",
+      err.response?.data || err.message
+    );
+    throw new Error("Twitter OAuth2 refresh failed");
+  }
+}
+
 router.get("/api/n8n/pending-posts", async (req, res) => {
   const posts = await Post.find({
     status: "approved",
@@ -135,6 +237,7 @@ router.get("/api/n8n/linkedin-token", async (req, res) => {
 // n8n → publish LinkedIn post
 router.post("/api/n8n/linkedin/publish", async (req, res) => {
   try {
+    
     const { postId, userId } = req.body;
     //console.log("n8n LinkedIn publish request:", { postId, userId });
 
@@ -194,7 +297,6 @@ router.post("/api/n8n/linkedin/publish", async (req, res) => {
       const mediaDoc = await Media.findById(post.media);
       if (mediaDoc) {
         const mediaUrl = `http://localhost:3000/api/posts/media/${mediaDoc._id}`;
-        
 
         try {
           const assetUrn = await uploadImageToLinkedIn(
@@ -202,7 +304,7 @@ router.post("/api/n8n/linkedin/publish", async (req, res) => {
             accessToken,
             ownerUrn
           );
-          
+
           mediaAsset.push(assetUrn);
           //payload.content = { media: { id: assetUrn } }; // ✅ correct format
         } catch (err) {
@@ -350,6 +452,100 @@ router.post("/api/n8n/linkedin/publish", async (req, res) => {
       details: err.response?.data || err.message,
     });
   }
+});
+
+router.post("/api/n8n/twitter/publish", async (req, res) => {
+  const { postId, userId } = req.body;
+
+  const post = await Post.findById(postId);
+  if (!post) return res.status(404).json({ error: "Post not found" });
+
+  const auth = await PlatformAuth.findOne({ userId, platform: "twitter" });
+  if (!auth) {
+    return res.status(400).json({ error: "Twitter not connected" });
+  }
+
+  const bearerToken = await getValidTwitterAccessToken(userId);
+
+  const mediaArray = Array.isArray(post.media) ? post.media : [];
+  const mediaIds = [];
+  try {
+    if (mediaArray.length > 0) {
+      // 🔒 OAuth1 REQUIRED ONLY HERE
+      if (
+        !auth.credentials?.oauthToken ||
+        !auth.credentials?.oauthTokenSecret
+      ) {
+        return res.status(400).json({
+          error: "Twitter OAuth1 required for media uploads",
+        });
+      }
+
+      const oauthCreds = {
+        oauthToken: auth.credentials.oauthToken,
+        oauthTokenSecret: auth.credentials.oauthTokenSecret,
+      };
+
+      const mediaDocs = await Media.find({ _id: { $in: mediaArray } });
+
+      for (const m of mediaDocs) {
+        if (!m?.data) continue;
+
+        const mediaId = await uploadMediaToTwitter(
+          m.data,
+          m.mimeType,
+          oauthCreds
+        );
+
+        mediaIds.push(mediaId);
+      }
+    }
+
+    const tweetRes = await axios.post(
+      "https://api.twitter.com/2/tweets",
+      {
+        text: post.body_text.slice(0, 280),
+        ...(mediaIds.length > 0 && {
+          media: { media_ids: mediaIds },
+        }),
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${bearerToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    post.status = "published";
+    post.remoteIds = post.remoteIds || {};
+    post.remoteIds.twitter = tweetRes.data.data.id;
+    post.publishedAt = new Date();
+    await post.save();
+
+    res.json({
+      success: true,
+      twitterId: post.remoteIds.twitter,
+      postId: post._id,
+    });
+  } catch (err) {
+    console.error("n8n Twitter publish error:", err.response?.data || err);
+    return res.status(err.response?.status || 500).json({
+      error: "Failed to publish Twitter post",
+      details: err.response?.data || err.message,
+    });
+  }
+});
+
+router.get("/api/n8n/twitter-token", async (req, res) => {
+  const { userId } = req.query; // n8n passes userId
+
+  const doc = await PlatformAuth.findOne({ userId, platform: "twitter" });
+  if (!doc) return res.status(404).json({ error: "Not connected" });
+
+  res.json({
+    n8nToken: doc.n8nToken,
+  });
 });
 
 module.exports = router;

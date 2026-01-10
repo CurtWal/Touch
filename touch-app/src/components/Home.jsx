@@ -9,7 +9,7 @@ import PostBulkUpload from "./PostBulkUpload";
 import PostForm from "./PostForm";
 import PostList from "./PostList";
 import CalendarPage from "./CalendarPage";
-
+import TwitterSection from "./TwitterSection";
 export default function Home({isLoggedIn}) {
     return (
         <div className="Home">
@@ -18,12 +18,14 @@ export default function Home({isLoggedIn}) {
             {isLoggedIn &&(
             <>
             {/* 
-            <FollowUpToggle />
+            
             
             <AiChat /> */}
             <Upload />
             <CommandSender />
+            <FollowUpToggle />
             <LinkedInSection />
+            <TwitterSection />
             <CalendarPage />
             {/* <PostBulkUpload />
             <PostList /> */}

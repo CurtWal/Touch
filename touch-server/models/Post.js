@@ -4,7 +4,7 @@ const PostSchema = new mongoose.Schema(
   {
     platforms: [String],
     body_text: String,
-    media: [{ type: mongoose.Schema.Types.ObjectId, ref: "Media" }],
+    media: [{ type: mongoose.Schema.Types.ObjectId, ref: "Media", default: [], }],
     first_comment: String,
     scheduled_at: Date,
     status: {

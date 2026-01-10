@@ -119,7 +119,7 @@ function PostForm({ onSave, initialScheduledAt = "" }) {
       />
 
       <div className="flex items-center gap-3 mb-2 text-black">
-        {["facebook", "instagram", "linkedin", "tiktok"].map((platform) => (
+        {["linkedin", "twitter"].map((platform) => (
           <label key={platform} className="inline-flex items-center gap-2 text-sm">
             <input
               type="checkbox"
