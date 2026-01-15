@@ -22,7 +22,7 @@ const ContactsInfo = require("./routes/contacts");
 const platformAuthRoutes = require("./routes/platformAuth");
 const OAuthRoutes = require("./routes/oAuth");
 const jwt = require("jsonwebtoken");
-const n8nPostScheduleRoutes = require("./routes/n8nPostSchedule");
+const {router: n8nPostScheduleRoutes} = require("./routes/n8nPostSchedule");
 const multer = require("multer");
 
 const twilioClient = twilio(

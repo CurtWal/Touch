@@ -1,6 +1,12 @@
 const Agenda = require("agenda");
 const Post = require("../models/Post");
 require("dotenv").config();
+const {
+  publishToLinkedIn,
+  publishToTwitter,
+} = require("../routes/n8nPostSchedule");
+const PlatformAuth = require("../models/PlatformAuthSchema");
+const jwt = require("jsonwebtoken");
 
 const agenda = new Agenda({
   db: {
@@ -17,24 +23,55 @@ agenda.define("publish post", async (job) => {
   try {
     const { postId } = job.attrs.data;
     const post = await Post.findById(postId);
+    
     if (!post) {
       console.warn(`publish post: post not found ${postId}`);
       return;
     }
+    const userId = post.createdBy;
 
-    if (post.status !== "scheduled") {
-      console.log(
-        `publish post: skipping post ${postId}, status=${post.status}`
-      );
+    if (post.status !== "scheduled" && post.status !== "approved") {
+      console.log(`publish post: skipping ${postId}, status=${post.status}`);
       return;
     }
 
-    console.log(`Publishing post: ${post._id}`);
-    // TODO: API integrations (publish to social platforms)
-    post.status = "published";
-    await post.save();
+    //console.log(`🚀 Agenda publishing post ${postId}`);
+    console.log("Post owner:", post.createdBy);
+    const results = {};
+    const errors = {};
+
+    for (const platform of post.platforms) {
+      try {
+        if (platform === "linkedin") {
+          const r = await publishToLinkedIn({ post, userId });
+          results.linkedin = r.remoteId;
+        }
+
+        if (platform === "twitter") {
+          const r = await publishToTwitter({ post, userId });
+          results.twitter = r.remoteId;
+        }
+      } catch (err) {
+        console.error(`${platform} publish failed`, err.message);
+        errors[platform] = err.message;
+      }
+    }
+
+    if (Object.keys(results).length > 0) {
+      post.status = "published";
+      post.remoteIds = results;
+      post.publishedAt = new Date();
+      await post.save();
+
+      // 🧹 cleanup after 24h
+      await agenda.schedule("in 24 hours", "delete-published-post", {
+        postId: post._id,
+      });
+    }
+
+    console.log(`✅ Agenda finished post ${postId}`, { results, errors });
   } catch (err) {
-    console.error("Error in publish post job:", err);
+    console.error("❌ Agenda publish job failed:", err);
     throw err;
   }
 });
@@ -53,7 +90,7 @@ agenda.define("delete-published-post", async (job) => {
     // Delete any base64 or stored media inside the DB
     if (post.media && post.media.length) {
       console.log("Cleaning media for post:", postId);
-      post.media = [];  // wipe media array
+      post.media = []; // wipe media array
     }
 
     await post.deleteOne();

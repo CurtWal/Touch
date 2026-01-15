@@ -197,6 +197,261 @@ async function getValidTwitterAccessToken(userId) {
     throw new Error("Twitter OAuth2 refresh failed");
   }
 }
+async function publishToLinkedIn({ post, userId }) {
+  const auth = await PlatformAuth.findOne({ userId, platform: "linkedin" });
+  if (!auth) throw new Error("LinkedIn not connected");
+
+  const accessToken = auth.credentials.accessToken;
+
+  // Get or fetch LinkedIn user ID
+    let linkedinUserId =
+      auth.credentials?.linkedinUserId ||
+      auth.credentials?.id ||
+      auth.credentials?.profileId ||
+      auth.credentials?.linkedinId ||
+      null;
+
+    if (!linkedinUserId) {
+      try {
+        const me = await axios.get("https://api.linkedin.com/v2/userinfo", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        linkedinUserId = me.data?.sub;
+        if (linkedinUserId) {
+          await PlatformAuth.updateOne(
+            { _id: auth._id },
+            { $set: { "credentials.linkedinUserId": linkedinUserId } }
+          );
+        }
+      } catch (err) {
+        return res.status(400).json({
+          error: "Unable to fetch LinkedIn user ID",
+          details: err.response?.data || err.message,
+        });
+      }
+    }
+
+    const ownerUrn = `urn:li:person:${linkedinUserId}`;
+
+    // ---------------------------------------------
+    // 1️⃣ UPLOAD EACH IMAGE FROM DATABASE
+    // ---------------------------------------------
+    let mediaAsset = [];
+
+    if (post.media) {
+      const mediaDoc = await Media.findById(post.media);
+      if (mediaDoc) {
+        const mediaUrl = `http://localhost:3000/api/posts/media/${mediaDoc._id}`;
+
+        try {
+          const assetUrn = await uploadImageToLinkedIn(
+            mediaUrl,
+            accessToken,
+            ownerUrn
+          );
+
+          mediaAsset.push(assetUrn);
+          //payload.content = { media: { id: assetUrn } }; // ✅ correct format
+        } catch (err) {
+          console.error(
+            "Image upload failed:",
+            err.response?.data || err.message
+          );
+        }
+      }
+    }
+    //  legacy code for multiple images -- currently only single image supported
+    // if (Array.isArray(post.media) && post.media.length > 0) {
+    //   const mediaDocs = await Media.find({ _id: { $in: post.media } });
+    //   const mediaUrl = `http://localhost:3000/api/posts/media/${mediaDocs._id}`;
+    //     try {
+    //       const assetUrn = await uploadImageToLinkedIn(
+    //         mediaUrl,
+    //         accessToken,
+    //         ownerUrn
+    //       );
+
+    //       mediaAssets.push({
+    //         status: "READY",
+    //         description: { text: "" },
+    //         media: assetUrn,
+    //         title: { text: "" },
+    //       });
+    //     } catch (err) {
+    //       console.error("Image upload failed:", mediaUrl, err.message);
+    //     }
+    //   // for (const media of mediaDocs) {
+    //   //   const mediaUrl = `http://localhost:3000/api/posts/media/${media._id}`;
+    //   //   try {
+    //   //     const assetUrn = await uploadImageToLinkedIn(
+    //   //       mediaUrl,
+    //   //       accessToken,
+    //   //       ownerUrn
+    //   //     );
+    //   //     console.log("Uploaded image to LinkedIn, asset URN:", assetUrn);
+    //   //     mediaAssets.push({
+    //   //       status: "READY",
+    //   //       description: { text: "" },
+    //   //       media: assetUrn,
+    //   //       title: { text: "" },
+    //   //     });
+    //   //   } catch (err) {
+    //   //     console.error("Image upload failed:", mediaUrl, err.message);
+    //   //   }
+    //   // }
+    // }
+
+    // ---------------------------------------------
+    // 2️⃣ BUILD LINKEDIN POST BODY
+    // ---------------------------------------------
+    const payload = {
+      author: ownerUrn,
+      commentary: post.body_text || "",
+      visibility: "PUBLIC",
+      distribution: { feedDistribution: "MAIN_FEED" },
+      lifecycleState: "PUBLISHED",
+    };
+    if (mediaAsset.length > 0) {
+      payload.content = { media: { id: mediaAsset[0] } }; // only first image for now
+    }
+
+    // legacy code for old API
+    // const shareContent =
+    //   mediaAssets.length > 0
+    //     ? {
+    //         "com.linkedin.ugc.ShareContent": {
+    //           shareCommentary: { text: post.body_text },
+    //           shareMediaCategory: "IMAGE",
+    //           media: mediaAssets,
+    //         },
+    //       }
+    //     : {
+    //         "com.linkedin.ugc.ShareContent": {
+    //           shareCommentary: { text: post.body_text },
+    //           shareMediaCategory: "NONE",
+    //         },
+    //       };
+
+    // ---------------------------------------------
+    // 3️⃣ PUBLISH TO LINKEDIN
+    // ---------------------------------------------
+
+    // legacy code for old API old route
+    // const linkedinRes = await axios.post(
+    //   "https://api.linkedin.com/v2/ugcPosts",
+    //   {
+    //     author: ownerUrn,
+    //     lifecycleState: "PUBLISHED",
+    //     specificContent: shareContent,
+    //     visibility: {
+    //       "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC",
+    //     },
+    //   },
+    //   {
+    //     headers: {
+    //       Authorization: `Bearer ${accessToken}`,
+    //       "X-Restli-Protocol-Version": "2.0.0",
+    //       "Content-Type": "application/json",
+    //     },
+    //   }
+    // );
+    const linkedinRes = await axios.post(
+      "https://api.linkedin.com/rest/posts",
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "X-Restli-Protocol-Version": "2.0.0",
+          "LinkedIn-Version": "202511",
+        },
+      }
+    );
+
+    // ---------------------------------------------
+    // 4️⃣ UPDATE POST STATUS
+    // ---------------------------------------------
+    post.status = "published";
+    post.remoteIds = post.remoteIds || {};
+    post.remoteIds.linkedin =
+      linkedinRes.data.id || linkedinRes.data || "unknown";
+    post.publishedAt = new Date();
+    await post.save();
+
+  return {
+    platform: "linkedin",
+    remoteId: linkedinRes.data.id || "unknown",
+    postId: post._id,
+  };
+}
+async function publishToTwitter({ post, userId }) {
+  const auth = await PlatformAuth.findOne({ userId, platform: "twitter" });
+  if (!auth) throw new Error("Twitter not connected");
+
+  const bearerToken = await getValidTwitterAccessToken(userId);
+
+  const mediaArray = Array.isArray(post.media) ? post.media : [];
+  const mediaIds = [];
+  
+    if (mediaArray.length > 0) {
+      // 🔒 OAuth1 REQUIRED ONLY HERE
+      if (
+        !auth.credentials?.oauthToken ||
+        !auth.credentials?.oauthTokenSecret
+      ) {
+        return res.status(400).json({
+          error: "Twitter OAuth1 required for media uploads",
+        });
+      }
+
+      const oauthCreds = {
+        oauthToken: auth.credentials.oauthToken,
+        oauthTokenSecret: auth.credentials.oauthTokenSecret,
+      };
+
+      const mediaDocs = await Media.find({ _id: { $in: mediaArray } });
+
+      for (const m of mediaDocs) {
+        if (!m?.data) continue;
+
+        const mediaId = await uploadMediaToTwitter(
+          m.data,
+          m.mimeType,
+          oauthCreds
+        );
+
+        mediaIds.push(mediaId);
+      }
+    }
+
+    const tweetRes = await axios.post(
+      "https://api.twitter.com/2/tweets",
+      {
+        text: post.body_text.slice(0, 280),
+        ...(mediaIds.length > 0 && {
+          media: { media_ids: mediaIds },
+        }),
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${bearerToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    post.status = "published";
+    post.remoteIds = post.remoteIds || {};
+    post.remoteIds.twitter = tweetRes.data.data.id;
+    post.publishedAt = new Date();
+    await post.save();
+  return {
+    platform: "twitter",
+    remoteId: tweetRes.data.data.id,
+    postId: post._id,
+  };
+}
 
 router.get("/api/n8n/pending-posts", async (req, res) => {
   const posts = await Post.find({
@@ -548,4 +803,57 @@ router.get("/api/n8n/twitter-token", async (req, res) => {
   });
 });
 
-module.exports = router;
+router.post("/api/n8n/publish", async (req, res) => {
+  const { postId, userId } = req.body;
+
+  if (!postId || !userId) {
+    return res.status(400).json({ error: "Missing postId or userId" });
+  }
+
+  const post = await Post.findById(postId);
+  if (!post) return res.status(404).json({ error: "Post not found" });
+
+  const results = {};
+  const errors = {};
+
+  for (const platform of post.platforms) {
+    try {
+      if (platform === "linkedin") {
+        const r = await publishToLinkedIn({ post, userId });
+        results.linkedin = r.remoteId;
+      }
+
+      if (platform === "twitter") {
+        const r = await publishToTwitter({ post, userId });
+        results.twitter = r.remoteId;
+      }
+    } catch (err) {
+      console.error(`${platform} publish failed`, err.message);
+      errors[platform] = err.message;
+    }
+  }
+
+  // ✅ If at least one platform succeeded, mark as published
+  if (Object.keys(results).length > 0) {
+    post.status = "published";
+    post.remoteIds = results;
+    post.publishedAt = new Date();
+    await post.save();
+
+    await agenda.schedule("in 24 hours", "delete-published-post", {
+      postId: post._id,
+    });
+  }
+
+  return res.json({
+    success: Object.keys(results).length > 0,
+    results,
+    errors,
+  });
+});
+
+module.exports = {
+  router,
+  publishToLinkedIn,
+  publishToTwitter,
+};
