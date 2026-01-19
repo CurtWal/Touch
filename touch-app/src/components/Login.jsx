@@ -22,7 +22,7 @@ function Login() {
             localStorage.setItem('userId', response.data.user.id);
             console.log(localStorage.getItem('userId'));
             alert('Login successful!');
-            navigate("/");
+            navigate("/home");
             window.location.reload();
         } catch (error) {
             alert('Login failed: ' + error.response.data.error);

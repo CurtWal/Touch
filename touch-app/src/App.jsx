@@ -11,6 +11,7 @@ import axios from "axios";
 import Register from "./components/Register";
 import Login from "./components/Login";
 import Home from "./components/Home";
+import LandingPage from "./components/LandingPage";
 import {
   BrowserRouter,
   Routes,
@@ -22,14 +23,26 @@ import { jwtDecode } from "jwt-decode";
 import { SocialAccountsPage } from "./components/SocialAccountsPage";
 
 function Layout() {
-  window.onscroll = () => {
-    let header = document.querySelector(".header");
-    header.classList.toggle("sticky", window.scrollY > 100);
-  };
+  useEffect(() => {
+    const onScroll = () => {
+      const header = document.querySelector(".header");
+      if (header) {
+        header.classList.toggle("sticky", window.scrollY > 100);
+      }
+    };
+
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const location = useLocation();
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("token"));
 
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    setIsLoggedIn(!!token);
+  }, [location.pathname]);
+  
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("userId");
@@ -42,7 +55,7 @@ function Layout() {
   };
 
   useEffect(() => {
-    if (location.pathname === "/") {
+    if (location.pathname === "/" || location.pathname === "/home") {
       document.body.style.backgroundColor = "black";
     } else {
       document.body.style.backgroundColor = "#1470AF";
@@ -93,45 +106,18 @@ function Layout() {
   // }
   return (
     <>
-      <div>
-        <header class="header">
-          <h1>Touch</h1>
-          <nav class="navbar" style={{ display: "inline-flex", gap: "15px", fontSize: "30px" }}>
-            
-            <Link to="/" className="!text-white hover:!text-red-500">
-              Home
-            </Link> 
-            {isLoggedIn && (
-              <div style={{ display: "inline-flex",  }}>
-                <p
-                  onClick={logout}
-                  className="!text-white hover:!text-red-500 cursor-pointer font-semibold w-15"
-                >
-                  Logout
-                </p>
-              </div>
-            )}
-            {!isLoggedIn && (
-              <div style={{ display: "inline-flex", gap: "15px" }}> 
-                <Link to="/login" className="!text-white hover:!text-red-500">
-              Login
-            </Link>
-            <Link to="/register" className="!text-white hover:!text-red-500">
-              Register
-            </Link> 
-              </div>
-            )}
-           
-          </nav>
-        </header>
-      </div>
       <div className="Main-content">
         <Routes>
-                  <Route path="/register" element={<Register />} />
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/" element={<Home isLoggedIn={isLoggedIn}/>} />
-                   <Route path="/social-accounts" element={<SocialAccountsPage />} />
-                </Routes></div>
+          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/"
+            element={<LandingPage isLoggedIn={isLoggedIn} logout={logout} />}
+          />
+          <Route path="/home" element={<Home isLoggedIn={isLoggedIn} />} />
+          <Route path="/social-accounts" element={<SocialAccountsPage />} />
+        </Routes>
+      </div>
     </>
   );
 }
