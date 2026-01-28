@@ -16,20 +16,33 @@ const Media = require("../models/Media");
 // file limits: default to 5MB (LinkedIn-like) or override via env
 const MAX_FILE_BYTES = parseInt(
   process.env.LINKEDIN_IMAGE_MAX_BYTES || "5242880",
-  10
+  10,
 );
 const storage = multer.memoryStorage();
-const uploadMedia = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_FILE_BYTES },
-  fileFilter: (req, file, cb) => {
-    const allowed = ["image/jpeg", "image/png", "image/webp"];
-    if (!allowed.includes(file.mimetype)) {
-      return cb(new Error("Invalid file type"));
-    }
-    cb(null, true);
-  },
-});
+// const uploadMedia = multer({
+//   storage: multer.memoryStorage(),
+//   limits: { fileSize: MAX_FILE_BYTES },
+//   fileFilter: (req, file, cb) => {
+//     const allowed = [
+//       "image/jpeg",
+//       "image/png",
+//       "image/webp",
+//       "video/mp4",
+//       "video/quicktime", // .mov
+//       "video/webm",
+//     ];
+//     if (!allowed.includes(file.mimetype)) {
+//       return cb(new Error("Invalid file type"));
+//     }
+//     cb(null, true);
+//   },
+// });
+function getMediaTypeFromMime(mime) {
+  if (!mime) return "image"; // safe default
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  return "image";
+}
 
 async function downloadImageToMedia(url) {
   try {

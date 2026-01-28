@@ -49,12 +49,20 @@ export function Navbar() {
             </Link>
           </>
         ) : (
+          <>
+          <Link
+              to="/home"
+              className="!text-black !hover:text-red-500 font-medium"
+            >
+              Home
+            </Link>
           <p
             onClick={logout}
             className="text-black hover:text-red-500 font-semibold cursor-pointer"
           >
             Logout
           </p>
+          </>
         )}
       </div>
     </header>

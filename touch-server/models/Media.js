@@ -4,6 +4,13 @@ const MediaSchema = new mongoose.Schema({
   data: Buffer,
   mimeType: String,
   filename: String,
+   mediaType: String,
+  //  {
+  //   type: String,
+  //    enum: ["image", "video"],
+  //    required: true,
+  // },
+  // size: Number,
   createdAt: {
     type: Date,
     default: Date.now,

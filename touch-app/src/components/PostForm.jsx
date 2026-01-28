@@ -137,7 +137,7 @@ function PostForm({ onSave, initialScheduledAt = "" }) {
         <input
           className="hover:cursor-pointer"
           type="file"
-          accept="image/*"
+          accept="image/*,video/*" 
           multiple
           onChange={handleFileChange}
         />
