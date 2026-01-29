@@ -50,12 +50,21 @@ app.use(express.json());
 app.use(fileUpload());
 app.use(userSettingsRoute);
 
-// ensure uploads dir exists
-const uploadsDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+// ensure uploads dir exists (use /tmp on Vercel, local dir locally)
+// const uploadsDir = process.env.VERCEL 
+//   ? path.join("/tmp", "uploads")
+//   : path.join(__dirname, "uploads");
+  
+// if (!fs.existsSync(uploadsDir)) {
+//   try {
+//     fs.mkdirSync(uploadsDir, { recursive: true });
+//   } catch (err) {
+//     console.warn("⚠️ Could not create uploads directory:", err.message);
+//   }
+// }
 
-// serve uploads
-app.use("/uploads", express.static(uploadsDir));
+// // serve uploads
+// app.use("/uploads", express.static(uploadsDir));
 
 app.get("/", (req, res) => {
   res.send("Hello World");
