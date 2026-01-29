@@ -7,6 +7,7 @@ import {
   Link,
   Routes,
 } from "react-router-dom";
+import { Navbar } from "./LandingPage";
 function Login() {
       const navigate = useNavigate();
 
@@ -29,6 +30,8 @@ function Login() {
         }   
     };
     return (
+        <>
+        <Navbar />
         <div className='dark:text-white p-4 max-w-md mx-auto mt-10 border rounded bg-white dark:bg-gray-800'>
         <form onSubmit={handleLogin} className=' flex flex-col gap-4'>   
             <h2 className=''>Login</h2>
@@ -45,6 +48,7 @@ function Login() {
             <button type="submit">Login</button>
         </form>
         </div>
+        </>
     );
 }
 export default Login;

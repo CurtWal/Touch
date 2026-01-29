@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { toast } from "react-hot-toast";
 import LinkedInSection from "./LinkedInSection";
 import TwitterSection from "./TwitterSection";
-
+import { Navbar } from "./LandingPage";
 export function SocialAccountsPage() {
   useEffect(() => {
   const params = new URLSearchParams(window.location.search);
@@ -30,6 +30,7 @@ export function SocialAccountsPage() {
 
   return (
     <div className="space-y-4">
+      <Navbar />
       <LinkedInSection />
       <TwitterSection />
     </div>

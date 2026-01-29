@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 const Contact = require("../models/Contacts");
+const User = require("../models/User");
 const { verifyToken } = require("./auth");
 const { agenda } = require("../jobs/agendaScheduler"); // use existing agenda instance
 
@@ -9,6 +10,9 @@ const { agenda } = require("../jobs/agendaScheduler"); // use existing agenda in
 async function processCommand(command, userId, token) {
   // load contacts
   const userCrmData = await Contact.find({ userId }).lean();
+  
+  // fetch user info for appending to messages
+  const user = await User.findById(userId);
 
   // send command + data to AI (n8n)
   const payload = { chatInput: command, crmDataUrl: userCrmData };
@@ -62,10 +66,22 @@ async function processCommand(command, userId, token) {
 
       for (const c of contactsToSend) {
         const messageType = c.type || actionObj.type || "email";
+        
+        // Append user contact info to message based on type
+        let messageWithSignature = c.message;
+        if (user) {
+          const userInfo = messageType.toLowerCase() === "sms" || messageType.toLowerCase() === "text" 
+            ? user.phone 
+            : user.email;
+          if (userInfo) {
+            messageWithSignature = `${c.message}\n\nSent from: ${user.name} (${userInfo})`;
+          }
+        }
+        
         const sendBody = {
           type: messageType,
           name: c.name,
-          message: c.message,
+          message: messageWithSignature,
         };
 
         //console.log(`📤 Sending ${messageType.toUpperCase()} to ${c.name}`);

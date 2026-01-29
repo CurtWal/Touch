@@ -10,7 +10,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 // 🟩 Register a new user
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, phone } = req.body;
     if (!name || !email || !password)
       return res.status(400).json({ error: "Missing required fields" });
 
@@ -18,13 +18,13 @@ router.post("/register", async (req, res) => {
     if (userExists)
       return res.status(400).json({ error: "User already exists" });
 
-    const user = await User.create({ name, email, password});
+    const user = await User.create({ name, email, password, phone });
 
     // use process.env.JWT_SECRET at sign time
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET || "your-secret-key", { expiresIn: "7d" });
     res.json({
       success: true,
-      user: { id: user._id, name: user.name, email: user.email },
+      user: { id: user._id, name: user.name, email: user.email, phone: user.phone },
       token,
     });
   } catch (err) {

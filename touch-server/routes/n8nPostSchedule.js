@@ -1285,36 +1285,36 @@ async function publishToTwitter({ post, userId }) {
 // });
 
 // DEBUG: Check OAuth credentials stored for a user
-router.get("/debug/twitter-oauth/:userId", async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const auth = await PlatformAuth.findOne({ userId, platform: "twitter" });
-    if (!auth) {
-      return res.json({ error: "No Twitter auth found", userId });
-    }
-    res.json({
-      userId,
-      hasAccessToken: !!auth.credentials?.accessToken,
-      hasRefreshToken: !!auth.credentials?.refreshToken,
-      hasOAuthToken: !!auth.credentials?.oauthToken,
-      hasOAuthTokenSecret: !!auth.credentials?.oauthTokenSecret,
-      oauthTokenLength: auth.credentials?.oauthToken?.length || 0,
-      oauthTokenSecretLength: auth.credentials?.oauthTokenSecret?.length || 0,
-      expiresAt: auth.expiresAt,
-      credentials: {
-        // Don't expose full tokens, just indicators
-        oauthToken: auth.credentials?.oauthToken
-          ? `${auth.credentials.oauthToken.substring(0, 10)}...`
-          : null,
-        oauthTokenSecret: auth.credentials?.oauthTokenSecret
-          ? `${auth.credentials.oauthTokenSecret.substring(0, 10)}...`
-          : null,
-      },
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// router.get("/debug/twitter-oauth/:userId", async (req, res) => {
+//   try {
+//     const { userId } = req.params;
+//     const auth = await PlatformAuth.findOne({ userId, platform: "twitter" });
+//     if (!auth) {
+//       return res.json({ error: "No Twitter auth found", userId });
+//     }
+//     res.json({
+//       userId,
+//       hasAccessToken: !!auth.credentials?.accessToken,
+//       hasRefreshToken: !!auth.credentials?.refreshToken,
+//       hasOAuthToken: !!auth.credentials?.oauthToken,
+//       hasOAuthTokenSecret: !!auth.credentials?.oauthTokenSecret,
+//       oauthTokenLength: auth.credentials?.oauthToken?.length || 0,
+//       oauthTokenSecretLength: auth.credentials?.oauthTokenSecret?.length || 0,
+//       expiresAt: auth.expiresAt,
+//       credentials: {
+//         // Don't expose full tokens, just indicators
+//         oauthToken: auth.credentials?.oauthToken
+//           ? `${auth.credentials.oauthToken.substring(0, 10)}...`
+//           : null,
+//         oauthTokenSecret: auth.credentials?.oauthTokenSecret
+//           ? `${auth.credentials.oauthTokenSecret.substring(0, 10)}...`
+//           : null,
+//       },
+//     });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
 module.exports = {
   router,

@@ -35,6 +35,7 @@ export function Navbar() {
       <div className="flex gap-4 items-center">
         {!isLoggedIn ? (
           <>
+          <Link to="/" className="!text-black !hover:text-red-500 font-medium"> Home </Link>
             <Link
               to="/login"
               className="!text-black !hover:text-red-500 font-medium"
