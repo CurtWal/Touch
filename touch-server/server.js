@@ -444,15 +444,15 @@ async function sendBatchMessages(contacts, type, message, res) {
 }
 
 
-app.use("/", autoFollowUpRoute);
+app.use(autoFollowUpRoute);
 app.use("/api/posts", postRoutes);
-app.use("/", aiAgentChatRoutes);
-app.use("/", Auth.router);
-app.use("/", Command);
-app.use("/", ContactsInfo);
+app.use(aiAgentChatRoutes);
+app.use(Auth.router);
+app.use(Command);
+app.use(ContactsInfo);
 app.use(platformAuthRoutes);
 app.use(OAuthRoutes);
-app.use("/", n8nPostScheduleRoutes);
+app.use( n8nPostScheduleRoutes);
 
 mongoose
   .connect(process.env.MONGO_URI)
