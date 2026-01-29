@@ -66,12 +66,6 @@ async function downloadImageToMedia(url) {
 function parseDateAndTime(dateStr, timeStr) {
   if (!dateStr || !timeStr) return null;
 
-  // Normalize date
-  const parsedDate = new Date(dateStr);
-  if (isNaN(parsedDate)) {
-    throw new Error(`Invalid date format: ${dateStr}`);
-  }
-
   let hours = 0;
   let minutes = 0;
 
@@ -95,11 +89,17 @@ function parseDateAndTime(dateStr, timeStr) {
     if (ampm === "am" && hours === 12) hours = 0;
   }
 
-  // Build final ISO datetime
-  const finalDate = new Date(parsedDate);
-  finalDate.setHours(hours, minutes, 0, 0);
-
-  return finalDate.toISOString();
+  // Create date in LOCAL timezone (not UTC)
+  const year = parseInt(dateStr.split('-')[0], 10);
+  const month = parseInt(dateStr.split('-')[1], 10);
+  const day = parseInt(dateStr.split('-')[2], 10);
+  const localDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  
+  // Adjust to UTC by subtracting timezone offset
+  const tzOffsetMs = localDate.getTimezoneOffset() * 60000;
+  const utcDate = new Date(localDate.getTime() - tzOffsetMs);
+  
+  return utcDate.toISOString();
 }
 function excelDateToJSDate(serial) {
   // Excel epoch starts on Jan 1, 1900
@@ -290,7 +290,7 @@ router.post("/upload-media", async (req, res) => {
     await media.save();
 
     res.json({
-      url: `http://localhost:3000/api/posts/media/${media._id}`,
+      url: `${process.env.VITE_API_URL}/api/posts/media/${media._id}`,
       mediaId: media._id,
     });
   } catch (err) {

@@ -93,7 +93,7 @@ if (!agenda._definitions || !agenda._definitions["random_follow_up"]) {
             process.env.SERVER_JWT_SECRET || process.env.JWT_SECRET,
             { expiresIn: "5m" }
           );
-          const crmUrl = `http://localhost:3000/api/contacts/${
+          const crmUrl = `${process.env.VITE_API_URL}/api/contacts/${
             contact._id
           }?token=${encodeURIComponent(contactToken)}`;
 
@@ -105,7 +105,7 @@ if (!agenda._definitions || !agenda._definitions["random_follow_up"]) {
           );
 
           const aiResponse = await axios.post(
-            "http://localhost:5678/webhook-test/chat-handler",
+            `${process.env.N8N_WEBHOOK_URL}`,
             {
               payload: {
                 chatInput: `Write a friendly, personal follow up message to ${contact.first_name}. Use their notes: "${contact.notes}".`,
@@ -189,7 +189,7 @@ if (!agenda._definitions || !agenda._definitions["random_follow_up"]) {
 
           // send (single contact)
           await axios.post(
-            "http://localhost:3000/send-message",
+            `${process.env.VITE_API_URL}/send-message`,
             {
               type: sendType,
               message,

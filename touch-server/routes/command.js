@@ -18,7 +18,7 @@ async function processCommand(command, userId, token) {
   const payload = { chatInput: command, crmDataUrl: userCrmData };
 
   const response = await axios.post(
-    "http://localhost:5678/webhook-test/chat-handler",
+    `${process.env.N8N_WEBHOOK_URL}`,
     { payload },
     {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -87,7 +87,7 @@ async function processCommand(command, userId, token) {
         //console.log(`📤 Sending ${messageType.toUpperCase()} to ${c.name}`);
 
         try {
-          await axios.post("http://localhost:3000/send-message", sendBody, {
+          await axios.post(`${process.env.VITE_API_URL}/send-message`, sendBody, {
             headers: { Authorization: `Bearer ${tokenHeader}` },
           });
         } catch (err) {

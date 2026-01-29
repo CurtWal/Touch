@@ -10,7 +10,7 @@ function Register() {
         e.preventDefault();
         const { name,email, password, phone } = e.target.elements;
         try {
-            const response = await axios.post('http://localhost:3000/register', {
+            const response = await axios.post(`${import.meta.env.VITE_API_URL}/register`, {
                 name: name.value,
                 email: email.value,
                 password: password.value,

@@ -18,7 +18,7 @@ function CommandSender() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post(
-        "http://localhost:3000/api/command",
+        `${import.meta.env.VITE_API_URL}/api/command`,
         { command },
         {
           headers: {

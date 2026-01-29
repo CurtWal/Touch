@@ -9,7 +9,7 @@ export default function FollowUpToggle() {
     const fetchSettings = async () => {
       const token = localStorage.getItem("token");
       try {
-        const res = await axios.get("http://localhost:3000/api/user/settings", {
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/user/settings`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.data?.auto_follow_up_enabled !== undefined) {
@@ -42,14 +42,14 @@ export default function FollowUpToggle() {
     try {
       // 1) Save setting toggle
       await axios.post(
-        "http://localhost:3000/api/followups/toggle",
+        `${import.meta.env.VITE_API_URL}/api/followups/toggle`,
         { enabled: newValue },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       // 2) Start/stop the scheduler
       await axios.post(
-        "http://localhost:3000/api/auto-follow-up",
+        `${import.meta.env.VITE_API_URL}/api/auto-follow-up`,
         { enabled: newValue },
         { headers: { Authorization: `Bearer ${token}` } }
       );

@@ -9,7 +9,7 @@ export default function DayPostsPanel({ date, posts = [], onApproved = () => {} 
     const token = localStorage.getItem("token");
     setLoadingIds((s) => [...s, id]);
     try {
-      await axios.put(`http://localhost:3000/api/posts/${id}/approve`, {}, {
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/posts/${id}/approve`, {}, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       onApproved();

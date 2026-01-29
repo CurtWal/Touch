@@ -46,7 +46,7 @@ export default function CalendarPage() {
     try {
       setLoading(true);
       const token = localStorage.getItem("token");
-      const res = await fetch("http://localhost:3000/api/posts", {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/posts`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();

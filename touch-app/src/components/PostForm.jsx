@@ -66,7 +66,7 @@ function PostForm({ onSave, initialScheduledAt = "" }) {
         for (const f of form.mediaFiles) {
           const fd = new FormData();
           fd.append("file", f);
-          const res = await axios.post("http://localhost:3000/api/posts/upload-media", fd, {
+          const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/posts/upload-media`, fd, {
             headers: { Authorization: `Bearer ${token}` },
           });
           uploadedIds.push(res.data.mediaId || res.data.id || res.data._id);
@@ -81,7 +81,7 @@ function PostForm({ onSave, initialScheduledAt = "" }) {
         scheduled_at: form.scheduled_at || null,
       };
 
-      const createRes = await axios.post("http://localhost:3000/api/posts", payload, {
+      const createRes = await axios.post(`${import.meta.env.VITE_API_URL}/api/posts`, payload, {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       });
 

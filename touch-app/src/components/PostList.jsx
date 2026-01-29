@@ -7,7 +7,7 @@ function PostList() {
 
   const fetchPosts = async () => {
     const token = localStorage.getItem("token");
-    const res = await fetch("http://localhost:3000/api/posts", {
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/posts`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     const data = await res.json();
@@ -16,7 +16,7 @@ function PostList() {
 
   const approvePost = async (id) => {
     const token = localStorage.getItem("token");
-    await axios.put(`http://localhost:3000/api/posts/${id}/approve`, {}, {
+    await axios.put(`${import.meta.env.VITE_API_URL}/api/posts/${id}/approve`, {}, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     });
     fetchPosts();

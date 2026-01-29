@@ -19,7 +19,7 @@ router.post("/api/chat", verifyToken, async (req, res) => {
 
     // 🔹 Call your n8n AI webhook
     const response = await axios.post(
-      "http://localhost:5678/webhook/chat-handler",
+      `${process.env.N8N_WEBHOOK_URL}`,
       { payload }
     );
 
@@ -86,7 +86,7 @@ router.post("/api/chat", verifyToken, async (req, res) => {
         };
 
         return axios.post(
-          "http://localhost:3000/send-message",
+          `${process.env.VITE_API_URL}/send-message`,
           sendBody,
           {
             headers: { Authorization: `Bearer ${token}` },

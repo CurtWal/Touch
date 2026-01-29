@@ -24,7 +24,7 @@ export default function Upload() {
     if (!userId) return;
 
     setLoading(true);
-    fetch(`http://localhost:3000/crm/${userId}`, {
+    fetch(`${import.meta.env.VITE_API_URL}/crm/${userId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -42,14 +42,14 @@ export default function Upload() {
     const formData = new FormData();
     formData.append("file", file);
 
-    fetch("http://localhost:3000/crm-upload", {
+    fetch(`${import.meta.env.VITE_API_URL}/crm-upload`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
     })
       .then((res) => res.json())
       .then(() =>
-        fetch(`http://localhost:3000/crm/${userId}`, {
+        fetch(`${import.meta.env.VITE_API_URL}/crm/${userId}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
       )
@@ -88,7 +88,7 @@ export default function Upload() {
 
     if (newRows.length === 0) return;
 
-    const res = await fetch("http://localhost:3000/crm-add", {
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/crm-add`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -111,7 +111,7 @@ export default function Upload() {
     const token = localStorage.getItem("token");
 
     if (row?._id) {
-      await fetch(`http://localhost:3000/crm/${row._id}`, {
+      await fetch(`${import.meta.env.VITE_API_URL}/crm/${row._id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -127,7 +127,7 @@ export default function Upload() {
 
     const token = localStorage.getItem("token");
 
-    await fetch(`http://localhost:3000/crm`, {
+    await fetch(`${import.meta.env.VITE_API_URL}/crm`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
