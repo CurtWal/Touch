@@ -463,6 +463,10 @@ mongoose
   await agenda.start();
 })();
 
+app.get("/", (req, res) => {
+  res.send("Hello Touch!");
+});
+
 app.listen(port, () => {
   console.log(`server is running on port ${port}`);
 });
