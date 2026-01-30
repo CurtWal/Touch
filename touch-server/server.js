@@ -67,7 +67,7 @@ app.use(userSettingsRoute);
 // app.use("/uploads", express.static(uploadsDir));
 
 app.get("/", (req, res) => {
-  res.send("Hello World");
+  res.send("Welcome to the Touch Server!");
 });
 
 let uploadedCRMData = [];
