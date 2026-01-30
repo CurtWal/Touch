@@ -75,18 +75,10 @@ function PostForm({ onSave, initialScheduledAt = "" }) {
 
       // Convert datetime-local to UTC ISO string
       let scheduledAtISO = null;
-      if (form.scheduled_at) {
-        // datetime-local format: "2026-01-29T17:55"
-        const [datePart, timePart] = form.scheduled_at.split('T');
-        const [year, month, day] = datePart.split('-');
-        const [hours, minutes] = timePart.split(':');
-        
-        // Create local date and convert to UTC
-        const tzOffsetMs = new Date().getTimezoneOffset() * 60000;
-        const localDate = new Date(year, parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes));
-        const utcDate = new Date(localDate.getTime() - tzOffsetMs);
-        scheduledAtISO = utcDate.toISOString();
-      }
+if (form.scheduled_at) {
+  scheduledAtISO = new Date(form.scheduled_at).toISOString();
+}
+     
 
       const payload = {
         platforms: form.platforms,

@@ -63,46 +63,29 @@ async function downloadImageToMedia(url) {
     return null;
   }
 }
-function parseDateAndTime(dateStr, timeStr, timezoneOffsetMinutes = 0) {
+function parseDateAndTime(dateStr, timeStr) {
   if (!dateStr || !timeStr) return null;
+
+  const [year, month, day] = dateStr.split("-").map(Number);
 
   let hours = 0;
   let minutes = 0;
 
-  timeStr = timeStr.trim().toLowerCase();
+  const match = timeStr.trim().toLowerCase().match(
+    /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/
+  );
 
-  // Handle “8pm”, "8:00pm", “08:00 PM”, etc.
-  const timeRegex = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/;
-  const match = timeStr.match(timeRegex);
-
-  if (!match) {
-    throw new Error(`Invalid time format: ${timeStr}`);
-  }
+  if (!match) throw new Error(`Invalid time format: ${timeStr}`);
 
   hours = parseInt(match[1], 10);
   minutes = match[2] ? parseInt(match[2], 10) : 0;
   const ampm = match[3];
 
-  // Convert 12hr → 24hr if needed
-  if (ampm) {
-    if (ampm === "pm" && hours < 12) hours += 12;
-    if (ampm === "am" && hours === 12) hours = 0;
-  }
+  if (ampm === "pm" && hours < 12) hours += 12;
+  if (ampm === "am" && hours === 12) hours = 0;
 
-  // Parse date components
-  const year = parseInt(dateStr.split('-')[0], 10);
-  const month = parseInt(dateStr.split('-')[1], 10);
-  const day = parseInt(dateStr.split('-')[2], 10);
-  
-  // Create UTC date from user's local time input
-  // Then subtract the timezone offset to get the actual UTC time
-  // For EST (UTC-5, offset = -300): user's 5:55 PM EST = 10:55 PM UTC
-  const utcDate = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0));
-  
-  // Adjust for user's timezone offset
-  const adjustedDate = new Date(utcDate.getTime() - (timezoneOffsetMinutes * 60000));
-  
-  return adjustedDate.toISOString();
+  // ✅ Local → UTC handled automatically
+  return new Date(year, month - 1, day, hours, minutes).toISOString();
 }
 function excelDateToJSDate(serial) {
   // Excel epoch starts on Jan 1, 1900
@@ -162,7 +145,6 @@ router.post("/upload", verifyToken, async (req, res) => {
     }
 
     const file = req.files.file;
-    const timezoneOffset = req.body.timezoneOffset || 0; // timezone offset in minutes from client
     const workbook = xlsx.read(file.data, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = xlsx.utils.sheet_to_json(sheet, { defval: "" });
@@ -203,7 +185,7 @@ router.post("/upload", verifyToken, async (req, res) => {
             typeof row.time === "number"
               ? excelTimeToString(row.time)
               : row.time;
-          scheduledAt = parseDateAndTime(dateVal, timeVal, timezoneOffset);
+          scheduledAt = parseDateAndTime(dateVal, timeVal);
         } catch (err) {
           console.warn("Invalid date/time:", row.date, row.time);
         }
