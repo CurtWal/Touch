@@ -29,6 +29,7 @@ export default function PostBulkUpload({ onUploadSuccess }) {
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("timezoneOffset", new Date().getTimezoneOffset()); // add timezone offset
 
     try {
       const token = localStorage.getItem("token");

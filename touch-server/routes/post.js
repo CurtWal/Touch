@@ -63,7 +63,7 @@ async function downloadImageToMedia(url) {
     return null;
   }
 }
-function parseDateAndTime(dateStr, timeStr) {
+function parseDateAndTime(dateStr, timeStr, timezoneOffsetMinutes = 0) {
   if (!dateStr || !timeStr) return null;
 
   let hours = 0;
@@ -89,17 +89,20 @@ function parseDateAndTime(dateStr, timeStr) {
     if (ampm === "am" && hours === 12) hours = 0;
   }
 
-  // Create date in LOCAL timezone (not UTC)
+  // Parse date components
   const year = parseInt(dateStr.split('-')[0], 10);
   const month = parseInt(dateStr.split('-')[1], 10);
   const day = parseInt(dateStr.split('-')[2], 10);
-  const localDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
   
-  // Adjust to UTC by subtracting timezone offset
-  const tzOffsetMs = localDate.getTimezoneOffset() * 60000;
-  const utcDate = new Date(localDate.getTime() - tzOffsetMs);
+  // Create UTC date from user's local time input
+  // Then subtract the timezone offset to get the actual UTC time
+  // For EST (UTC-5, offset = -300): user's 5:55 PM EST = 10:55 PM UTC
+  const utcDate = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0));
   
-  return utcDate.toISOString();
+  // Adjust for user's timezone offset
+  const adjustedDate = new Date(utcDate.getTime() - (timezoneOffsetMinutes * 60000));
+  
+  return adjustedDate.toISOString();
 }
 function excelDateToJSDate(serial) {
   // Excel epoch starts on Jan 1, 1900
@@ -127,6 +130,7 @@ router.post("/", verifyToken, async (req, res) => {
     media = [],
     first_comment = "",
     scheduled_at,
+    timezoneOffset = 0, // offset in minutes (e.g., -300 for EST)
   } = req.body;
   try {
     const post = new Post({
@@ -159,6 +163,7 @@ router.post("/upload", verifyToken, async (req, res) => {
     }
 
     const file = req.files.file;
+    const timezoneOffset = req.body.timezoneOffset || 0; // timezone offset in minutes from client
     const workbook = xlsx.read(file.data, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = xlsx.utils.sheet_to_json(sheet, { defval: "" });
@@ -199,7 +204,7 @@ router.post("/upload", verifyToken, async (req, res) => {
             typeof row.time === "number"
               ? excelTimeToString(row.time)
               : row.time;
-          scheduledAt = parseDateAndTime(dateVal, timeVal);
+          scheduledAt = parseDateAndTime(dateVal, timeVal, timezoneOffset);
         } catch (err) {
           console.warn("Invalid date/time:", row.date, row.time);
         }

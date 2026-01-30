@@ -79,6 +79,7 @@ function PostForm({ onSave, initialScheduledAt = "" }) {
         media: [...(form.media || []), ...uploadedIds],
         first_comment: form.first_comment,
         scheduled_at: form.scheduled_at || null,
+        timezoneOffset: new Date().getTimezoneOffset(), // client's timezone offset in minutes
       };
 
       const createRes = await axios.post(`${import.meta.env.VITE_API_URL}/api/posts`, payload, {
