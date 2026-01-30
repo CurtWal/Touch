@@ -130,7 +130,6 @@ router.post("/", verifyToken, async (req, res) => {
     media = [],
     first_comment = "",
     scheduled_at,
-    timezoneOffset = 0, // offset in minutes (e.g., -300 for EST)
   } = req.body;
   try {
     const post = new Post({

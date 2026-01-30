@@ -73,13 +73,27 @@ function PostForm({ onSave, initialScheduledAt = "" }) {
         }
       }
 
+      // Convert datetime-local to UTC ISO string
+      let scheduledAtISO = null;
+      if (form.scheduled_at) {
+        // datetime-local format: "2026-01-29T17:55"
+        const [datePart, timePart] = form.scheduled_at.split('T');
+        const [year, month, day] = datePart.split('-');
+        const [hours, minutes] = timePart.split(':');
+        
+        // Create local date and convert to UTC
+        const tzOffsetMs = new Date().getTimezoneOffset() * 60000;
+        const localDate = new Date(year, parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes));
+        const utcDate = new Date(localDate.getTime() - tzOffsetMs);
+        scheduledAtISO = utcDate.toISOString();
+      }
+
       const payload = {
         platforms: form.platforms,
         body_text: form.body_text,
         media: [...(form.media || []), ...uploadedIds],
         first_comment: form.first_comment,
-        scheduled_at: form.scheduled_at || null,
-        timezoneOffset: new Date().getTimezoneOffset(), // client's timezone offset in minutes
+        scheduled_at: scheduledAtISO,
       };
 
       const createRes = await axios.post(`${import.meta.env.VITE_API_URL}/api/posts`, payload, {
