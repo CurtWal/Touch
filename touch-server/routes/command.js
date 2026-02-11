@@ -75,6 +75,7 @@ async function executeActions(actions, user, token) {
           type: messageType,
           name: c.name,
           message: messageWithSignature,
+          mediaUrl: c.mediaUrl || actionObj.mediaUrl,
         };
 
         try {

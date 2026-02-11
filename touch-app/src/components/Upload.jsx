@@ -69,6 +69,31 @@ export default function Upload() {
     );
   };
 
+  // Save a single field for an existing contact (on blur)
+  const handleSaveField = async (idx, name, value) => {
+    const row = formRows[idx];
+    if (!row || !row._id) return; // only save if contact already exists in DB
+
+    const token = localStorage.getItem("token");
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/crm/${row._id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ [name]: value }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setError(err.error || "Failed to save contact");
+      }
+    } catch (err) {
+      setError("Failed to save contact");
+    }
+  };
+
   const handleNewRowChange = (e) => {
     const { name, value } = e.target;
     setNewRow((prev) => ({ ...prev, [name]: value }));
@@ -222,6 +247,7 @@ export default function Upload() {
                   name={key}
                   value={row[key] ?? ""}
                   onChange={(e) => handleInputChange(e, idx)}
+                  onBlur={(e) => handleSaveField(idx, e.target.name, e.target.value)}
                   className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:outline-none text-sm"
                 />
               </td>

@@ -35,6 +35,67 @@ const mg = mailgun.client({ username: "api", key: process.env.MAILGUN_KEY });
 // import agenda (if using agenda for scheduling)
 const { agenda } = require("./jobs/agendaScheduler");
 require("dotenv").config();
+
+// Normalize various time representations into HH:MM (24-hour) string
+function normalizeTime(value) {
+  if (value == null) return "";
+  let s = String(value).trim();
+  if (s === "") return "";
+
+  s = s.replace(/^"|"$/g, "");
+
+  // hh:mm or h.mm patterns
+  const timeRegex = /^(\d{1,2})(?::|\.)(\d{1,2})(?:\s*(am|pm))?$/i;
+  const tm = s.match(timeRegex);
+  if (tm) {
+    let hh = parseInt(tm[1], 10);
+    let mm = parseInt(tm[2], 10);
+    const ampm = tm[3];
+    if (ampm) {
+      if (/pm/i.test(ampm) && hh < 12) hh += 12;
+      if (/am/i.test(ampm) && hh === 12) hh = 0;
+    }
+    hh = Math.max(0, Math.min(23, hh));
+    mm = Math.max(0, Math.min(59, mm));
+    return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+  }
+
+  // plain numeric values
+  if (/^-?\d+(?:\.\d+)?$/.test(s)) {
+    const num = Number(s);
+    let totalMinutes = 0;
+    if (num >= 0 && num <= 1) {
+      // Excel fractional day (e.g. 0.5 -> 12:00)
+      totalMinutes = Math.round(num * 24 * 60);
+    } else if (num > 1 && num < 24) {
+      // hours expressed as decimal (e.g. 8.5 -> 08:30)
+      const hours = Math.floor(num);
+      const minutes = Math.round((num - hours) * 60);
+      totalMinutes = hours * 60 + minutes;
+    } else {
+      // Excel serial numbers with date component: use fractional day
+      const frac = num - Math.floor(num);
+      totalMinutes = Math.round(frac * 24 * 60);
+    }
+    totalMinutes = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+    const hh = Math.floor(totalMinutes / 60);
+    const mm = totalMinutes % 60;
+    return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+  }
+
+  // formats like '9 am' or '9pm'
+  const ampmRegex = /^(\d{1,2})\s*(am|pm)$/i;
+  const m2 = s.match(ampmRegex);
+  if (m2) {
+    let hh = parseInt(m2[1], 10);
+    const ampm = m2[2];
+    if (/pm/i.test(ampm) && hh < 12) hh += 12;
+    if (/am/i.test(ampm) && hh === 12) hh = 0;
+    return `${String(hh).padStart(2, "0")}:00`;
+  }
+
+  return s;
+}
 app.use(
   cors({
     origin: [
@@ -49,6 +110,38 @@ app.use(
 app.use(express.json());
 app.use(fileUpload());
 app.use(userSettingsRoute);
+
+// ensure uploads dir exists and serve it
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  try {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  } catch (err) {
+    console.warn("⚠️ Could not create uploads directory:", err.message);
+  }
+}
+app.use("/uploads", express.static(uploadsDir));
+
+// Simple file upload endpoint used for attaching images to messages
+app.post("/upload", verifyToken, async (req, res) => {
+  try {
+    if (!req.files || !req.files.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const file = req.files.file;
+    const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_")}`;
+    const savePath = path.join(uploadsDir, safeName);
+
+    await file.mv(savePath);
+
+    const publicUrl = `${req.protocol}://${req.get("host")}/uploads/${safeName}`;
+    return res.json({ success: true, url: publicUrl });
+  } catch (err) {
+    console.error("Error saving upload:", err);
+    return res.status(500).json({ error: "Failed to save file" });
+  }
+});
 
 // ensure uploads dir exists (use /tmp on Vercel, local dir locally)
 // const uploadsDir = process.env.VERCEL 
@@ -182,6 +275,14 @@ app.post("/crm-upload", verifyToken, async (req, res) => {
         "https://instagram.com/"
       );
 
+      // Normalize quiet hours to HH:MM strings
+      if (newRow.quiet_hours_start) {
+        newRow.quiet_hours_start = normalizeTime(newRow.quiet_hours_start);
+      }
+      if (newRow.quiet_hours_end) {
+        newRow.quiet_hours_end = normalizeTime(newRow.quiet_hours_end);
+      }
+
       REQUIRED_FIELDS.forEach((field) => {
         if (!newRow[field] || newRow[field].trim() === "") {
           errors.push(`Row ${idx + 2}: Missing value for "${field}"`);
@@ -241,10 +342,15 @@ app.post("/crm-add", verifyToken, async (req, res) => {
       return res.status(400).json({ error: "Missing userId or contacts" });
     }
     // Remove _unsaved flag before saving
-    const contactsToInsert = contacts.map(({ _unsaved, ...row }) => ({
-      userId,
-      ...row,
-    }));
+    const contactsToInsert = contacts.map(({ _unsaved, ...row }) => {
+      // normalize quiet hours
+      if (row.quiet_hours_start) row.quiet_hours_start = normalizeTime(row.quiet_hours_start);
+      if (row.quiet_hours_end) row.quiet_hours_end = normalizeTime(row.quiet_hours_end);
+      return {
+        userId,
+        ...row,
+      };
+    });
     await Contact.insertMany(contactsToInsert);
     res.json({ success: true, count: contactsToInsert.length });
   } catch (error) {
@@ -273,6 +379,35 @@ app.delete("/crm/:id", verifyToken, async (req, res) => {
   } catch (err) {
     console.error("Error deleting contact:", err);
     return res.status(500).json({ error: "Failed to delete contact" });
+  }
+});
+
+// Update a single contact (only if it belongs to the authenticated user)
+app.patch("/crm/:id", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const contactId = req.params.id;
+    const update = req.body || {};
+
+    // Normalize quiet hours if present
+    if (Object.prototype.hasOwnProperty.call(update, "quiet_hours_start")) {
+      update.quiet_hours_start = normalizeTime(update.quiet_hours_start);
+    }
+    if (Object.prototype.hasOwnProperty.call(update, "quiet_hours_end")) {
+      update.quiet_hours_end = normalizeTime(update.quiet_hours_end);
+    }
+
+    const updated = await Contact.findOneAndUpdate(
+      { _id: contactId, userId },
+      { $set: update },
+      { new: true }
+    );
+
+    if (!updated) return res.status(404).json({ error: "Contact not found" });
+    return res.json({ success: true, contact: updated });
+  } catch (err) {
+    console.error("Error updating contact:", err);
+    return res.status(500).json({ error: "Failed to update contact" });
   }
 });
 
@@ -313,7 +448,7 @@ app.post("/send-message", async (req, res) => {
     }
 
     // use verifiedUserId (may be null for some service flows)
-    const { type, name, names, message, sendToAll, contactId } = req.body;
+    const { type, name, names, message, sendToAll, contactId, mediaUrl } = req.body;
     const userId = verifiedUserId;
     console.log("/send-message called", { isService, verifiedUserId, type, contactId, sendToAll, names });
 
@@ -330,7 +465,7 @@ app.post("/send-message", async (req, res) => {
         return res.status(404).json({ error: "Contact not found" });
       }
       
-      await sendSingleMessage(contact, type, message);
+      await sendSingleMessage(contact, type, message, mediaUrl);
       return res.json({ success: true, message: `✅ ${type.toUpperCase()} sent to ${contact.email || contact.phone}` });
     }
 
@@ -338,7 +473,7 @@ app.post("/send-message", async (req, res) => {
     if (sendToAll) {
       if (!userId) return res.status(403).json({ error: "sendToAll requires authenticated user" });
       const contacts = await Contact.find({ userId });
-      return await sendBatchMessages(contacts, type, message, res);
+      return await sendBatchMessages(contacts, type, message, res, mediaUrl);
     }
 
     // If names array provided (requires user context)
@@ -363,7 +498,7 @@ app.post("/send-message", async (req, res) => {
       });
 
       if (!contacts.length) return res.status(404).json({ error: "No matching contacts found." });
-      return await sendBatchMessages(contacts, type, message, res);
+      return await sendBatchMessages(contacts, type, message, res, mediaUrl);
     }
 
     // Single-name fallback (requires user context)
@@ -387,7 +522,7 @@ app.post("/send-message", async (req, res) => {
 
     if (!contact) return res.status(404).json({ error: `No contact found for ${name}` });
 
-    await sendSingleMessage(contact, type, message);
+    await sendSingleMessage(contact, type, message, mediaUrl);
     return res.json({ success: true, message: `✅ ${type.toUpperCase()} sent to ${contact.email || contact.phone}` });
   } catch (error) {
     console.error("❌ Error sending message:", error);
@@ -396,27 +531,39 @@ app.post("/send-message", async (req, res) => {
 });
 
 async function sendSingleMessage(contact, type, message) {
+  // allow optional mediaUrl passed either on contact or as property
+  const mediaUrl = contact && (contact.mediaUrl || contact.attachmentUrl || contact.media || contact.mediaurl);
   if (type === "email" && contact.email) {
-    await mg.messages.create("motgpayment.com", {
+    const domain = process.env.MAILGUN_DOMAIN || "motgpayment.com";
+    const html = mediaUrl
+      ? `<p>${(message || "").replace(/\n/g, "<br/>")}</p><p><img src="${mediaUrl}" style="max-width:600px;"/></p>`
+      : undefined;
+
+    const payload = {
       from: process.env.EMAIL_USER,
       to: [contact.email],
       subject: "Message from Touch App",
       text: message,
-    });
+    };
+    if (html) payload.html = html;
+
+    await mg.messages.create(domain, payload);
     console.log(`✅ Email sent to ${contact.email}`);
   } else if (type === "sms" && contact.phone) {
-    await twilioClient.messages.create({
+    const opts = {
       body: message,
       from: process.env.TWILIO_NUMBER,
       to: contact.phone,
-    });
+    };
+    if (mediaUrl) opts.mediaUrl = [mediaUrl];
+    await twilioClient.messages.create(opts);
     console.log(`✅ SMS sent to ${contact.phone}`);
   } else {
     throw new Error("Missing contact email or phone.");
   }
 }
 
-async function sendBatchMessages(contacts, type, message, res) {
+async function sendBatchMessages(contacts, type, message, res, mediaUrl) {
   const batchSize = 10;
   let sent = 0;
   const errors = [];
@@ -427,7 +574,7 @@ async function sendBatchMessages(contacts, type, message, res) {
     await Promise.all(
       batch.map(async (contact) => {
         try {
-          await sendSingleMessage(contact, type, message);
+          await sendSingleMessage(contact, type, message, mediaUrl);
           sent++;
         } catch (err) {
           errors.push({

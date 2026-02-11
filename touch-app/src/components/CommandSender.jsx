@@ -50,6 +50,33 @@ function CommandSender() {
     });
   };
 
+  const handleFileUpload = async (actionIdx, contactIdx, file) => {
+    if (!file) return;
+    const token = localStorage.getItem("token");
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await axios.post(`${import.meta.env.VITE_API_URL}/upload`, formData, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
+      });
+      const url = res.data.url;
+      setPreviewActions((prev) => {
+        const copy = JSON.parse(JSON.stringify(prev));
+        if (!copy[actionIdx]) return prev;
+        const action = copy[actionIdx];
+        if (Array.isArray(action.contacts) && action.contacts[contactIdx]) {
+          action.contacts[contactIdx].mediaUrl = url;
+        } else if (!Array.isArray(action.contacts) && contactIdx === 0) {
+          action.mediaUrl = url;
+        }
+        return copy;
+      });
+    } catch (err) {
+      console.error("Upload failed:", err);
+      alert("Image upload failed.");
+    }
+  };
+
   const handleConfirm = async () => {
     if (!previewActions.length) return;
     setConfirming(true);
@@ -128,6 +155,16 @@ function CommandSender() {
                       rows={4}
                       className="w-full border rounded px-2 py-1 mt-1 text-black"
                     />
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleFileUpload(ai, ci, e.target.files && e.target.files[0])}
+                      />
+                      {c.mediaUrl && (
+                        <img src={c.mediaUrl} alt="attachment" style={{ maxHeight: 48, maxWidth: 120 }} />
+                      )}
+                    </div>
                   </div>
                 ))}
             </div>
